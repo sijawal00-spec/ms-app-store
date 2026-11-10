@@ -1,0 +1,729 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#06120e">
+<title>MS App Store</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+:root{
+  --bg:#050b09;
+  --panel:#0b1914;
+  --panel2:#10231b;
+  --green:#00e59b;
+  --gold:#e5bd62;
+  --white:#f4fff9;
+  --muted:#9aada4;
+  --border:rgba(0,229,155,.19);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--white);
+  font-family:Arial,Helvetica,sans-serif;
+}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+header{
+  position:sticky;top:0;z-index:20;
+  background:rgba(5,11,9,.96);
+  border-bottom:1px solid var(--border);
+  padding:12px 5%;
+  display:flex;align-items:center;justify-content:space-between;
+  gap:15px;flex-wrap:wrap;
+}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{
+  width:47px;height:47px;border:2px solid var(--gold);
+  border-radius:13px;background:#07150f;
+  display:grid;place-items:center;
+  box-shadow:0 0 15px #00e59b55;
+  color:var(--gold);font-weight:900;font-size:19px;
+}
+.brand-name{font-size:19px;font-weight:900}
+.brand-name span{color:var(--gold)}
+nav{display:flex;gap:8px;flex-wrap:wrap}
+nav button,.small-btn{
+  border:1px solid var(--border);background:var(--panel);
+  color:var(--white);padding:10px 13px;border-radius:9px;
+}
+nav button:hover,.small-btn:hover{border-color:var(--green);color:var(--green)}
+.primary{
+  background:linear-gradient(135deg,#00c987,#00e59b);
+  color:#04120c!important;border:0!important;
+  font-weight:800;padding:11px 17px;border-radius:9px;
+}
+.gold-btn{
+  background:linear-gradient(135deg,#c99a38,#f5d98b);
+  color:#171006;border:0;font-weight:800;
+  padding:11px 17px;border-radius:9px;
+}
+main{max-width:1250px;margin:auto;padding:25px 5% 70px}
+.hero{
+  border:1px solid var(--border);border-radius:22px;
+  padding:38px 25px;margin:15px 0 25px;
+  background:
+   radial-gradient(circle at 85% 15%,#00e59b20,transparent 35%),
+   linear-gradient(135deg,#10251b,#07110d 65%);
+}
+.hero h1{font-size:clamp(30px,6vw,54px);margin:0 0 12px}
+.hero h1 span{color:var(--gold)}
+.hero p{color:var(--muted);max-width:650px;line-height:1.7}
+.hero-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+.search-row{display:flex;gap:10px;margin:20px 0}
+input,textarea,select{
+  width:100%;padding:13px 14px;background:#07130e;
+  color:white;border:1px solid var(--border);
+  border-radius:9px;outline:none;
+}
+input:focus,textarea:focus,select:focus{border-color:var(--green)}
+.section-head{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;flex-wrap:wrap;margin:28px 0 15px;
+}
+.section-head h2{margin:0;font-size:22px}
+.muted{color:var(--muted)}
+.categories{
+  display:flex;gap:9px;overflow-x:auto;padding:4px 0 12px;
+}
+.cat{
+  flex:none;padding:10px 14px;border-radius:30px;
+  background:var(--panel);border:1px solid var(--border);
+  color:var(--muted);cursor:pointer;
+}
+.cat.active,.cat:hover{
+  background:#063d2b;border-color:var(--green);color:var(--green);
+}
+.grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+  gap:15px;
+}
+.app-card{
+  background:linear-gradient(145deg,#10231b,#09130f);
+  border:1px solid var(--border);border-radius:15px;
+  padding:16px;min-width:0;
+}
+.app-top{display:flex;align-items:center;gap:12px}
+.app-icon{
+  width:55px;height:55px;border-radius:13px;object-fit:cover;
+  background:#17382a;border:1px solid var(--border);
+  display:grid;place-items:center;font-size:23px;flex:none;
+}
+.app-card h3{margin:0 0 5px;font-size:16px;overflow-wrap:anywhere}
+.app-card p{color:var(--muted);font-size:13px;line-height:1.5}
+.tag{
+  display:inline-block;font-size:11px;color:var(--green);
+  border:1px solid var(--border);padding:5px 8px;border-radius:20px;
+  margin:8px 4px 8px 0;
+}
+.card-actions{display:flex;gap:8px;margin-top:10px}
+.card-actions button{flex:1}
+.panel{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:16px;padding:22px;margin:18px 0;
+}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.field{margin-bottom:13px}
+.field label{display:block;color:var(--muted);font-size:13px;margin-bottom:7px}
+.full{grid-column:1/-1}
+.auth-wrap{max-width:480px;margin:30px auto}
+.auth-wrap h2{margin-top:0;color:var(--gold)}
+.auth-links{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:15px}
+.link{background:none;border:0;color:var(--green);text-decoration:underline}
+.hidden{display:none!important}
+footer{
+  border-top:1px solid var(--border);padding:25px 5%;
+  text-align:center;color:var(--muted);font-size:13px;
+}
+.notice{padding:12px;border-radius:9px;background:#10231b;color:var(--muted);font-size:13px;line-height:1.6}
+#toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  background:#153b2b;color:white;padding:13px 18px;
+  border:1px solid var(--green);border-radius:10px;
+  display:none;z-index:99;max-width:90%;text-align:center;
+}
+@media(max-width:600px){
+ header{padding:10px 4%}
+ main{padding:15px 4% 50px}
+ .hero{padding:27px 18px}
+ .form-grid{grid-template-columns:1fr}
+ .full{grid-column:auto}
+ .brand-name{font-size:16px}
+ nav{width:100%}
+ nav button{flex:1;padding:9px 7px;font-size:12px}
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo">MS</div>
+    <div class="brand-name">MS <span>App Store</span></div>
+  </div>
+  <nav>
+    <button onclick="showPage('home')">Home</button>
+    <button onclick="showPage('apps')">Apps</button>
+    <button onclick="showPage('games')">Games</button>
+    <button onclick="showPage('submit')">Submit App</button>
+    <button id="accountButton" class="primary" onclick="showPage('login')">Login</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- HOME PAGE -->
+<section id="homePage">
+  <div class="hero">
+    <span class="tag">WELCOME TO MS APP STORE</span>
+    <h1>Discover. Download.<br><span>Explore More.</span></h1>
+    <p>
+      Discover useful apps and exciting games.
+      Explore a growing marketplace built for developers
+      and users.
+    </p>
+    <div class="hero-actions">
+      <button class="primary" onclick="showPage('apps')">Explore Apps</button>
+      <button class="gold-btn" onclick="showPage('submit')">Submit Your App</button>
+    </div>
+  </div>
+
+  <div class="search-row">
+    <input id="homeSearch" placeholder="Search apps and games..."
+      oninput="searchApps(this.value)">
+    <button class="primary" onclick="showPage('apps')">Search</button>
+  </div>
+
+  <div class="section-head">
+    <h2>Explore Categories</h2>
+    <span class="muted">49 Categories</span>
+  </div>
+  <div id="homeCategories"></div>
+
+  <div class="section-head">
+    <h2>Featured Apps</h2>
+    <button class="small-btn" onclick="showPage('apps')">View All</button>
+  </div>
+  <div class="grid" id="homeAppGrid"></div>
+</section>
+
+<!-- APPS PAGE -->
+<section id="appsPage" class="hidden">
+  <div class="section-head">
+    <h2>Explore Apps & Games</h2>
+  </div>
+  <input id="appSearch" placeholder="Search by app name..."
+    oninput="searchApps(this.value)">
+  <div id="allCategories"></div>
+  <div class="section-head">
+    <h2 id="listingTitle">All Approved Apps</h2>
+    <span class="muted" id="appCount"></span>
+  </div>
+  <div class="grid" id="allAppGrid"></div>
+</section>
+
+<!-- GAMES PAGE -->
+<section id="gamesPage" class="hidden">
+  <div class="section-head"><h2>Games</h2></div>
+  <div id="gameCategories"></div>
+  <div class="grid" id="gameGrid"></div>
+</section>
+
+<!-- LOGIN PAGE -->
+<section id="loginPage" class="hidden">
+  <div class="auth-wrap panel">
+    <h2>Welcome Back</h2>
+    <p class="muted">Login to your MS App Store account.</p>
+    <form onsubmit="loginUser(event)">
+      <div class="field">
+        <label>Email Address</label>
+        <input id="loginEmail" type="email" required placeholder="Enter your email">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input id="loginPassword" type="password" required placeholder="Enter password">
+      </div>
+      <button class="primary" style="width:100%">Login</button>
+    </form>
+    <div class="auth-links">
+      <button class="link" onclick="forgotPassword()">Forgot Password?</button>
+      <button class="link" onclick="showPage('signup')">Create New Account</button>
+    </div>
+  </div>
+</section>
+
+<!-- SIGNUP PAGE -->
+<section id="signupPage" class="hidden">
+  <div class="auth-wrap panel">
+    <h2>Create Account</h2>
+    <p class="muted">Join the MS App Store community.</p>
+    <form onsubmit="signupUser(event)">
+      <div class="field">
+        <label>Full Name</label>
+        <input id="signupName" required placeholder="Your full name">
+      </div>
+      <div class="field">
+        <label>Email Address</label>
+        <input id="signupEmail" type="email" required placeholder="Your email">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input id="signupPassword" type="password" minlength="8" required placeholder="Minimum 8 characters">
+      </div>
+      <div class="field">
+        <label>Confirm Password</label>
+        <input id="confirmPassword" type="password" minlength="8" required placeholder="Confirm password">
+      </div>
+      <div class="field">
+        <label>
+          <input id="terms" type="checkbox" required style="width:auto">
+          I agree to the Terms and Conditions.
+        </label>
+      </div>
+      <button class="primary" style="width:100%">Create Account</button>
+    </form>
+    <div class="auth-links">
+      <span class="muted">Already have an account?</span>
+      <button class="link" onclick="showPage('login')">Login</button>
+    </div>
+  </div>
+</section>
+
+<!-- SUBMIT APP PAGE -->
+<section id="submitPage" class="hidden">
+  <div class="panel">
+    <h2 style="color:var(--gold)">Submit Your App</h2>
+    <p class="muted">Submit your app for admin review. It will only appear publicly after approval.</p>
+    <div class="notice">
+      You must log in before submitting an app. APK submissions require the
+      private storage bucket and database policies to be configured.
+    </div>
+    <form id="submitForm" onsubmit="submitApp(event)" style="margin-top:20px">
+      <div class="form-grid">
+        <div class="field">
+          <label>App Name</label>
+          <input id="appName" required placeholder="App name">
+        </div>
+        <div class="field">
+          <label>Developer Name</label>
+          <input id="developerName" required placeholder="Developer name">
+        </div>
+        <div class="field">
+          <label>App Type</label>
+          <select id="appType" required>
+            <option value="app">Application</option>
+            <option value="game">Game</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Category</label>
+          <select id="appCategory" required></select>
+        </div>
+        <div class="field">
+          <label>Version</label>
+          <input id="appVersion" required placeholder="1.0.0">
+        </div>
+        <div class="field">
+          <label>App Icon URL (optional)</label>
+          <input id="appIcon" type="url" placeholder="https://...">
+        </div>
+        <div class="field full">
+          <label>Short Description</label>
+          <textarea id="appDescription" rows="4" required maxlength="1000"
+            placeholder="Describe your app..."></textarea>
+        </div>
+        <div class="field full">
+          <label>APK File</label>
+          <input id="apkFile" type="file" accept=".apk" required>
+        </div>
+      </div>
+      <button class="primary" type="submit">Submit for Admin Approval</button>
+    </form>
+  </div>
+</section>
+
+<!-- ACCOUNT PAGE -->
+<section id="accountPage" class="hidden">
+  <div class="panel">
+    <h2 style="color:var(--gold)">My Account</h2>
+    <p id="userEmail" class="muted"></p>
+    <button class="primary" onclick="showPage('submit')">Submit an App</button>
+    <button class="small-btn" onclick="logoutUser()">Logout</button>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="brand" style="justify-content:center;margin-bottom:10px">
+    <div class="logo">MS</div>
+    <div class="brand-name">MS <span>App Store</span></div>
+  </div>
+  © 2026 MS App Store. All rights reserved.
+  <p>Discover Apps • Explore Games • Support Developers</p>
+</footer>
+
+<div id="toast"></div>
+
+<script>
+/* ==========================================
+   SUPABASE CONFIGURATION
+   Your new MS App Store project
+========================================== */
+
+const SUPABASE_URL = "https://opnubbmamtybumihkdpa.supabase.co";
+
+/* Paste your Supabase Publishable Key below.
+   Do not paste the service_role secret key here. */
+const SUPABASE_KEY = "PASTE_YOUR_SUPABASE_PUBLISHABLE_KEY_HERE";
+
+let db = null;
+if(window.supabase && SUPABASE_KEY.startsWith("eyJ") || 
+   (window.supabase && SUPABASE_KEY.startsWith("sb_publishable_"))){
+  db = window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+}
+
+/* ==========================================
+   49 APP & GAME CATEGORIES
+========================================== */
+
+const appCategories = [
+"Art & Design","Auto & Vehicles","Beauty","Books & Reference",
+"Business","Comics","Communication","Dating","Education",
+"Entertainment","Events","Finance","Food & Drink","Health & Fitness",
+"House & Home","Libraries & Demo","Lifestyle","Maps & Navigation",
+"Medical","Music & Audio","News & Magazines","Parenting",
+"Personalization","Photography","Productivity","Shopping",
+"Social","Sports","Tools","Travel & Local",
+"Video Players & Editors","Weather"
+];
+
+const gameCategories = [
+"Action","Adventure","Arcade","Board","Card","Casino","Casual",
+"Educational","Music","Puzzle","Racing","Role Playing",
+"Simulation","Sports","Strategy","Trivia","Word"
+];
+
+const allCategories = [...appCategories,...gameCategories];
+
+let currentCategory = "All";
+let currentSearch = "";
+let approvedApps = [];
+let currentUser = null;
+
+const demoApps = [
+  {name:"MS Editor Media Hub",category:"Video Players & Editors",
+   app_type:"app",version:"1.0",developer_name:"MS Team",
+   description:"Create and explore media content.",icon_url:"",demo:true},
+  {name:"Photo Studio",category:"Photography",
+   app_type:"app",version:"1.0",developer_name:"Demo Developer",
+   description:"A sample photography app card.",icon_url:"",demo:true},
+  {name:"Puzzle World",category:"Puzzle",
+   app_type:"game",version:"1.0",developer_name:"Demo Games",
+   description:"A sample puzzle game card.",icon_url:"",demo:true}
+];
+
+function toast(message){
+  const el=document.getElementById("toast");
+  el.textContent=message;
+  el.style.display="block";
+  setTimeout(()=>el.style.display="none",3500);
+}
+
+function showPage(page){
+  document.querySelectorAll("main > section").forEach(s=>s.classList.add("hidden"));
+  const target=document.getElementById(page+"Page");
+  if(target) target.classList.remove("hidden");
+  window.scrollTo(0,0);
+  if(page==="apps" || page==="games") loadApps();
+  if(page==="account" && currentUser){
+    document.getElementById("userEmail").textContent=currentUser.email;
+  }
+  if(page==="submit" && !currentUser){
+    toast("Please login before submitting an app.");
+    setTimeout(()=>showPage("login"),700);
+  }
+}
+
+function renderCategories(){
+  const html = `
+    <div class="categories">
+      <button class="cat ${currentCategory==="All"?"active":""}"
+       onclick="filterCategory('All')">All</button>
+      ${allCategories.map(c=>`
+       <button class="cat ${currentCategory===c?"active":""}"
+       onclick="filterCategory('${c.replace(/'/g,"\\'")}')">${c}</button>
+      `).join("")}
+    </div>`;
+  document.getElementById("homeCategories").innerHTML=html;
+  document.getElementById("allCategories").innerHTML=html;
+  document.getElementById("gameCategories").innerHTML=`
+    <div class="categories">
+      ${gameCategories.map(c=>`
+       <button class="cat ${currentCategory===c?"active":""}"
+       onclick="filterCategory('${c}')">${c}</button>`).join("")}
+    </div>`;
+  document.getElementById("appCategory").innerHTML=
+    allCategories.map(c=>`<option>${c}</option>`).join("");
+}
+
+function filterCategory(category){
+  currentCategory=category;
+  renderCategories();
+  renderApps();
+  showPage("apps");
+}
+
+function searchApps(value){
+  currentSearch=value.toLowerCase();
+  renderApps();
+}
+
+function appCard(app){
+  const icon = app.icon_url
+    ? `<img class="app-icon" src="${escapeHTML(app.icon_url)}" alt="">`
+    : `<div class="app-icon">📱</div>`;
+  return `
+   <article class="app-card">
+     <div class="app-top">
+       ${icon}
+       <div>
+         <h3>${escapeHTML(app.name)}</h3>
+         <div class="muted" style="font-size:12px">
+          ${escapeHTML(app.developer_name||"Developer")}
+         </div>
+       </div>
+     </div>
+     <span class="tag">${escapeHTML(app.category||"Other")}</span>
+     <span class="tag">v${escapeHTML(app.version||"1.0")}</span>
+     <p>${escapeHTML(app.description||"No description available.")}</p>
+     <div class="card-actions">
+       <button class="primary" onclick="downloadApp('${app.id||""}')">Download</button>
+     </div>
+   </article>`;
+}
+
+function escapeHTML(value){
+  return String(value??"").replace(/[&<>"']/g,c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+
+function renderApps(){
+  let list=[...approvedApps];
+  if(list.length===0) list=demoApps;
+  if(currentCategory!=="All"){
+    list=list.filter(a=>a.category===currentCategory);
+  }
+  if(currentSearch){
+    list=list.filter(a=>
+      (a.name||"").toLowerCase().includes(currentSearch) ||
+      (a.description||"").toLowerCase().includes(currentSearch)
+    );
+  }
+  document.getElementById("allAppGrid").innerHTML=
+    list.length?list.map(appCard).join():
+    `<p class="muted">No apps found in this category yet.</p>`;
+  document.getElementById("homeAppGrid").innerHTML=
+    list.slice(0,4).map(appCard).join();
+  document.getElementById("gameGrid").innerHTML=
+    list.filter(a=>a.app_type==="game").map(appCard).join() ||
+    `<p class="muted">No approved games available yet.</p>`;
+  document.getElementById("appCount").textContent=list.length+" items";
+  document.getElementById("listingTitle").textContent=
+    currentCategory==="All"?"All Approved Apps":currentCategory;
+}
+
+async function loadApps(){
+  if(!db){renderApps();return;}
+  try{
+    const {data,error}=await db.from("apps")
+      .select("*").eq("status","approved").order("created_at",{ascending:false});
+    if(error) throw error;
+    approvedApps=data||[];
+  }catch(error){
+    console.error(error);
+    approvedApps=[];
+  }
+  renderApps();
+}
+
+/* ==========================================
+   AUTHENTICATION
+========================================== */
+
+async function signupUser(event){
+  event.preventDefault();
+  if(!db){toast("Add your Supabase Publishable Key first.");return;}
+
+  const name=document.getElementById("signupName").value.trim();
+  const email=document.getElementById("signupEmail").value.trim();
+  const password=document.getElementById("signupPassword").value;
+  const confirm=document.getElementById("confirmPassword").value;
+
+  if(password!==confirm){toast("Passwords do not match.");return;}
+
+  const {data,error}=await db.auth.signUp({
+    email,password,
+    options:{data:{full_name:name}}
+  });
+  if(error){toast(error.message);return;}
+  toast("Account created. Check your email for verification.");
+  document.getElementById("signupPassword").value="";
+  document.getElementById("confirmPassword").value="";
+  showPage("login");
+}
+
+async function loginUser(event){
+  event.preventDefault();
+  if(!db){toast("Add your Supabase Publishable Key first.");return;}
+
+  const email=document.getElementById("loginEmail").value.trim();
+  const password=document.getElementById("loginPassword").value;
+
+  const {data,error}=await db.auth.signInWithPassword({email,password});
+  if(error){toast(error.message);return;}
+  currentUser=data.user;
+  updateAccountButton();
+  toast("Login successful.");
+  showPage("account");
+}
+
+async function forgotPassword(){
+  if(!db){toast("Add your Supabase Publishable Key first.");return;}
+  const email=document.getElementById("loginEmail").value.trim();
+  if(!email){toast("Enter your email address first.");return;}
+  const {error}=await db.auth.resetPasswordForEmail(email,{
+    redirectTo:window.location.origin
+  });
+  if(error){toast(error.message);return;}
+  toast("Password reset link sent to your email.");
+}
+
+async function logoutUser(){
+  if(db) await db.auth.signOut();
+  currentUser=null;
+  updateAccountButton();
+  toast("You have logged out.");
+  showPage("home");
+}
+
+function updateAccountButton(){
+  const btn=document.getElementById("accountButton");
+  if(currentUser){
+    btn.textContent="My Account";
+    btn.onclick=()=>showPage("account");
+  }else{
+    btn.textContent="Login";
+    btn.onclick=()=>showPage("login");
+  }
+}
+
+/* ==========================================
+   APP SUBMISSION
+   Expected database table: apps
+   Expected private storage bucket: app-apks
+========================================== */
+
+async function submitApp(event){
+  event.preventDefault();
+
+  if(!db){toast("Configure Supabase Publishable Key first.");return;}
+  if(!currentUser){toast("Please login first.");showPage("login");return;}
+
+  const file=document.getElementById("apkFile").files[0];
+  if(!file){toast("Please select an APK file.");return;}
+  if(!file.name.toLowerCase().endsWith(".apk")){
+    toast("Only APK files are allowed.");return;
+  }
+  if(file.size>100*1024*1024){
+    toast("APK file must be smaller than 100 MB.");return;
+  }
+
+  const submitButton=document.querySelector("#submitForm button[type=submit]");
+  submitButton.disabled=true;
+  submitButton.textContent="Submitting...";
+
+  try{
+    const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
+    const apkPath=currentUser.id+"/"+Date.now()+"_"+safeName;
+
+    const {error:uploadError}=await db.storage
+      .from("app-apks")
+      .upload(apkPath,file,{contentType:"application/vnd.android.package-archive"});
+    if(uploadError) throw uploadError;
+
+    const record={
+      name:document.getElementById("appName").value.trim(),
+      developer_name:document.getElementById("developerName").value.trim(),
+      app_type:document.getElementById("appType").value,
+      category:document.getElementById("appCategory").value,
+      version:document.getElementById("appVersion").value.trim(),
+      description:document.getElementById("appDescription").value.trim(),
+      icon_url:document.getElementById("appIcon").value.trim()||null,
+      apk_path:apkPath,
+      user_id:currentUser.id,
+      status:"pending"
+    };
+
+    const {error:insertError}=await db.from("apps").insert(record);
+    if(insertError) throw insertError;
+
+    toast("App submitted. Waiting for admin approval.");
+    document.getElementById("submitForm").reset();
+    showPage("home");
+  }catch(error){
+    console.error(error);
+    toast("Submission failed: "+error.message);
+  }finally{
+    submitButton.disabled=false;
+    submitButton.textContent="Submit for Admin Approval";
+  }
+}
+
+async function downloadApp(id){
+  if(!db || !id){toast("This is a demo card. No download is available.");return;}
+
+  try{
+    const {data,error}=await db.from("apps")
+      .select("apk_path,status").eq("id",id).eq("status","approved").single();
+    if(error) throw error;
+    if(!data.apk_path) throw new Error("APK file not found.");
+
+    const {data:linkData,error:linkError}=await db.storage
+      .from("app-apks").createSignedUrl(data.apk_path,60);
+    if(linkError) throw linkError;
+    window.location.href=linkData.signedUrl;
+  }catch(error){
+    toast("Download unavailable: "+error.message);
+  }
+}
+
+/* ==========================================
+   STARTUP
+========================================== */
+
+renderCategories();
+renderApps();
+showPage("home");
+
+if(db){
+  db.auth.getSession().then(({data})=>{
+    currentUser=data.session?.user||null;
+    updateAccountButton();
+  });
+
+  db.auth.onAuthStateChange((_event,session)=>{
+    currentUser=session?.user||null;
+    updateAccountButton();
+  });
+
+  loadApps();
+}
+</script>
+</body>
+</html>
