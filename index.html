@@ -20,7 +20,7 @@
 <script>
 // Public browser config only. Never place service_role/secret keys here.
 const SUPABASE_URL = "https://opnubbmamtybumihkdpa.supabase.co";
-const SUPABASE_ANON_KEY = "PASTE_YOUR_SUPABASE_PUBLISHABLE_KEY_HERE";
+const SUPABASE_ANON_KEY = "sb_publishable_98EvT0vNnoYEu9DCUcqjzA_kKxLjwRk";
 const sb = window.supabase && !SUPABASE_ANON_KEY.includes("PASTE_") ? window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY) : null;
 const $=id=>document.getElementById(id);let currentUser=null,isAdmin=false,activeCategory='apps';
 function msg(t,err=false){$('globalMessage').textContent=t;$('globalMessage').classList.remove('hidden');$('globalMessage').classList.toggle('error',err);window.scrollTo({top:0,behavior:'smooth'});}
