@@ -145,7 +145,7 @@ async function showAppDetails(a,adminMode){
  const paths=sr.error?[]:(sr.data||[]).map(x=>x.storage_path);
  const urls=(await Promise.all(paths.map(p=>signedAsset('app-screenshots',p)))).filter(Boolean);
  const shots=urls.length?'<div class="screenshot-strip detail-screenshots">'+urls.map((u,i)=>'<img src="'+escapeHtml(u)+'" alt="Screenshot '+(i+1)+'">').join('')+'</div>':'<div class="screenshot-empty">No screenshots uploaded.</div>';
- const apkLink=adminMode?'<button class="secondary" onclick="openAdminApk(\\''+a.id+'\\')">Open submitted APK</button>':'<button class="install-btn" onclick="downloadApp(\\''+a.id+'\\')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM11 3h2v9l3.5-3.5 1.4 1.4L12 17l-5.9-7.1 1.4-1.4L11 12V3z"/></svg>Install / Download APK</button>';
+ const apkLink=adminMode?'<button class="secondary" onclick="openAdminApk(\''+a.id+'\')">Open submitted APK</button>':'<button class="install-btn" onclick="downloadApp(\''+a.id+'\')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM11 3h2v9l3.5-3.5 1.4 1.4L12 17l-5.9-7.1 1.4-1.4L11 12V3z"/></svg>Install / Download APK</button>';
  let updateArea='';
  if(!adminMode){
   const {data:update}=await sb.from('app_updates').select('id,version,version_code,reviewed_at').eq('app_id',a.id).eq('status','approved').order('reviewed_at',{ascending:false}).limit(1).maybeSingle();
