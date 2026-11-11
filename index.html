@@ -70,7 +70,7 @@ function nice(s){return ({pending:'Pending',under_review:'Under Review',comment_
 async function requireClient(){if(!sb)throw new Error('Supabase publishable key abhi HTML mein set nahi hui.');}
 async function checkAdmin(user){const {data,error}=await sb.from('admin_users').select('user_id,active').eq('user_id',user.id).eq('active',true).maybeSingle();if(error)throw error;return !!data;}
 async function signedAsset(bucket,path){if(!path)return '';if(/^https?:\/\//i.test(path))return path;const {data,error}=await sb.storage.from(bucket).createSignedUrl(path,3600);if(error){console.warn('Asset URL error:',error.message);return '';}return data?.signedUrl||'';}
-async function loadStore(){if(!sb){$('status').textContent='Supabase key set karne ke baad published apps yahan load hongi.';return;}const {data,error}=await sb.from('apps').select('id,name,developer_name,app_type,category,version,description,icon_path,apk_path,created_at').eq('status','approved').order('created_at',{ascending:false});if(error){$('status').textContent=error.message;return;}await renderStore(data||[]);}
+async function loadStore(){if(!sb){$('status').textContent='Supabase key set karne ke baad published apps yahan load hongi.';return;}const {data,error}=await sb.from('apps').select('id,name,developer_name,app_type,category,version,description,package_name,icon_path,apk_path,created_at').eq('status','approved').order('created_at',{ascending:false});if(error){$('status').textContent=error.message;return;}await renderStore(data||[]);}
 async function renderStore(items){
  publishedApps=items||[];
  const q=$('search').value.trim().toLowerCase();
