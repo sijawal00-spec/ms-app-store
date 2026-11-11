@@ -94,30 +94,48 @@ async function renderStore(items){
 
 
 let categoryDirectoryType='apps';
+function renderCategoryAppCards(rows){
+ const box=$('categoryPageApps');box.innerHTML='';
+ if(!rows.length){box.innerHTML='<div class="empty">No published apps in this category yet.</div>';return;}
+ rows.forEach(a=>{
+  const card=document.createElement('article');card.className='card';card.setAttribute('role','button');card.tabIndex=0;
+  card.addEventListener('click',()=>window.openPublicApp(a.id));
+  card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();window.openPublicApp(a.id);}});
+  const icon=document.createElement('div');icon.className='appicon';icon.textContent=(a.name||'A').slice(0,1).toUpperCase();
+  const title=document.createElement('h3');title.textContent=a.name||'Untitled app';
+  const meta=document.createElement('div');meta.className='meta';meta.textContent=(a.developer_name||'')+' · v'+(a.version||'');
+  const button=document.createElement('button');button.className='secondary';button.textContent='View App';
+  button.addEventListener('click',e=>{e.stopPropagation();window.openPublicApp(a.id);});
+  card.append(icon,title,meta,button);box.appendChild(card);
+ });
+}
 function openCategoryPage(category,type=categoryDirectoryType){
  activeCategory=type;selectedCategory=category;
  $('categoryPageTitle').textContent=category;
  $('categoryPageSubtitle').textContent=(type==='games'?'Games':'Apps')+' in this category';
  const cats=type==='games'?gameCategories:appCategories;
- $('categoryChoices').innerHTML=cats.map(c=>'<button class="chip '+(c===category?'active':'')+'" onclick="openCategoryPage(\\''+escapeHtml(c)+'\\',\\''+type+'\\')">'+escapeHtml(c)+'</button>').join('');
+ const choices=$('categoryChoices');choices.innerHTML='';
+ cats.forEach(c=>{
+  const button=document.createElement('button');button.className='chip'+(c===category?' active':'');button.textContent=c;
+  button.addEventListener('click',()=>openCategoryPage(c,type));choices.appendChild(button);
+ });
  const rows=publishedApps.filter(a=>(type==='games'?a.app_type==='game':a.app_type!=='game')&&a.category===category);
- $('categoryPageApps').innerHTML=rows.length?rows.map(a=>'<article class="card" role="button" onclick="openPublicApp(\\''+a.id+'\\')"><div class="appicon">'+escapeHtml((a.name||'A').slice(0,1).toUpperCase())+'</div><h3>'+escapeHtml(a.name)+'</h3><div class="meta">'+escapeHtml(a.developer_name||'')+' · v'+escapeHtml(a.version||'')+'</div><button class="secondary" onclick="event.stopPropagation();openPublicApp(\\''+a.id+'\\')">View App</button></article>').join(''):'<div class="empty">No published apps in this category yet.</div>';
- view('category');
+ renderCategoryAppCards(rows);view('category');
 }
 function showCategoryDirectory(type){
  categoryDirectoryType=type;activeCategory=type==='all'?'all':type;selectedCategory='All';
  $('categoryPageTitle').textContent=type==='all'?'All Categories':type==='games'?'Game Categories':'App Categories';
  $('categoryPageSubtitle').textContent='Select a category to open its own page.';
- let html='';
- if(type==='all'||type==='apps'){
-  html+='<div class="category-heading">App Categories</div>';
-  html+=appCategories.map(c=>'<button class="chip" onclick="openCategoryPage(\\''+escapeHtml(c)+'\\',\\'apps\\')">'+escapeHtml(c)+'</button>').join('');
- }
- if(type==='all'||type==='games'){
-  html+='<div class="category-heading">Game Categories</div>';
-  html+=gameCategories.map(c=>'<button class="chip" onclick="openCategoryPage(\\''+escapeHtml(c)+'\\',\\'games\\')">'+escapeHtml(c)+'</button>').join('');
- }
- $('categoryChoices').innerHTML=html;
+ const choices=$('categoryChoices');choices.innerHTML='';
+ const addGroup=(heading,cats,categoryType)=>{
+  const label=document.createElement('div');label.className='category-heading';label.textContent=heading;choices.appendChild(label);
+  cats.forEach(c=>{
+   const button=document.createElement('button');button.className='chip';button.textContent=c;
+   button.addEventListener('click',()=>openCategoryPage(c,categoryType));choices.appendChild(button);
+  });
+ };
+ if(type==='all'||type==='apps')addGroup('App Categories',appCategories,'apps');
+ if(type==='all'||type==='games')addGroup('Game Categories',gameCategories,'games');
  $('categoryPageApps').innerHTML='<div class="empty">Choose a category above.</div>';view('category');
 }
 async function showAppDetails(a,adminMode){
