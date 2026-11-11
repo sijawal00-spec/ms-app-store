@@ -178,17 +178,9 @@ async function submitAppUpdate(e,appId){
   uploadedPath=currentUser.id+'/updates/'+crypto.randomUUID()+'.apk';
   const up=await sb.storage.from('app-apks').upload(uploadedPath,file,{contentType:'application/vnd.android.package-archive',upsert:false});
   if(up.error)throw up.error;
-  const scan=await sb.functions.invoke('apk-metadata-scan',{body:{bucket:'app-apks',path:uploadedPath,file_name:file.name,file_size:file.size}});
-  if(scan.error||!scan.data||scan.data.success===false)throw new Error('APK metadata scan fail hua: '+(scan.error?.message||scan.data?.error||'Unknown scanner error'));
-  const meta=scan.data.metadata||scan.data;
-  if(!meta.package_name)throw new Error('APK ka Package Name scan nahin ho saka.');
-  if(String(meta.package_name)!==String(app.package_name||''))throw new Error('Package Name match nahin karta. Yeh APK is app ka update nahin hai, is liye accept nahin ki gayi.');
-  const version=String(meta.version_name||meta.version||'').trim();
-  if(!version)throw new Error('APK version scan nahin ho saki.');
-  const rawCode=Number.parseInt(meta.version_code,10);
-  const row={app_id:app.id,submitted_by:currentUser.id,package_name:meta.package_name,version,version_code:Number.isSafeInteger(rawCode)&&rawCode>=0?rawCode:null,apk_path:uploadedPath,apk_size_bytes:file.size,status:'pending'};
-  const {error}=await sb.from('app_updates').insert(row);if(error)throw error;
-  uploadedPath=null;msg('Update Admin review ke liye submit ho gaya. Purana APK safe hai.');
+  const submit=await sb.functions.invoke('submit-app-update',{body:{app_id:app.id,path:uploadedPath,file_name:file.name}});
+  if(submit.error||!submit.data||submit.data.success!==true)throw new Error(submit.error?.message||submit.data?.error||'Update submission failed.');
+  uploadedPath=null;msg('Package Name verify ho gaya. Update Admin review ke liye submit ho gaya. Purana APK safe hai.');
   await showAppDetails(app,false);
  }catch(err){
   if(uploadedPath)await sb.storage.from('app-apks').remove([uploadedPath]);
