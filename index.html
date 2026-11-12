@@ -301,13 +301,38 @@ function validateScreenshotFiles(files,statusId){
  if(oversized)throw new Error('"'+oversized.name+'" ka size '+(oversized.size/1048576).toFixed(2)+' MB hai. Har screenshot 10 MB ya us se kam hona chahiye.');
  return list;
 }
+function uploadScreenshotXHR(path,file,accessToken){
+ return new Promise((resolve,reject)=>{
+  const encodedPath=path.split('/').map(encodeURIComponent).join('/');
+  const xhr=new XMLHttpRequest();
+  xhr.open('POST',SUPABASE_URL+'/storage/v1/object/app-screenshots/'+encodedPath,true);
+  xhr.timeout=120000;
+  xhr.setRequestHeader('apikey',SUPABASE_ANON_KEY);
+  xhr.setRequestHeader('Authorization','Bearer '+accessToken);
+  xhr.setRequestHeader('Content-Type',file.type||'application/octet-stream');
+  xhr.setRequestHeader('Cache-Control','max-age=3600');
+  xhr.setRequestHeader('x-upsert','false');
+  xhr.onload=()=>{
+   if(xhr.status>=200&&xhr.status<300){resolve(true);return;}
+   let detail=xhr.responseText||('HTTP '+xhr.status);
+   try{const body=JSON.parse(xhr.responseText);detail=body.message||body.error||detail;}catch(_){}
+   reject(new Error('Storage HTTP '+xhr.status+': '+detail));
+  };
+  xhr.onerror=()=>reject(new Error('Browser network error (XHR). Upload request Supabase tak nahin pohanchi.'));
+  xhr.ontimeout=()=>reject(new Error('Upload timeout: 120 seconds mein Supabase ne jawab nahin diya.'));
+  xhr.onabort=()=>reject(new Error('Upload browser ne cancel kar di.'));
+  xhr.send(file);
+ });
+}
 async function uploadScreenshotFiles(files,appId,statusId){
  const paths=[];
  try{
+  let accessToken=null;
   if(files.length){
    const {data:{session},error:sessionError}=await sb.auth.getSession();
    if(sessionError)throw sessionError;
    if(!session?.access_token)throw new Error('Login session expire ho gaya. Dobara sign in karein.');
+   accessToken=session.access_token;
   }
   for(let i=0;i<files.length;i++){
    const shot=files[i],ext=shot.name.split('.').pop().toLowerCase();
@@ -330,24 +355,33 @@ async function uploadScreenshotFiles(files,appId,statusId){
      lastError=result.error;
     }catch(err){lastError=err;}
     const reason=lastError?.message||String(lastError||'Unknown upload error');
-    if(/failed to fetch|network|timeout|already exists|duplicate|409/i.test(reason)){
-     try{
-      const check=await sb.storage.from('app-screenshots').createSignedUrl(path,60);
-      if(!check.error){
-       paths.push(path);
-       uploaded=true;
-       break;
-      }
-     }catch(_){}
-    }
     if(attempt<3&&/failed to fetch|network|timeout/i.test(reason)){
      if(status)status.textContent='Network rukawat hui. Screenshot '+(i+1)+' ko dobara upload kar rahe hain ('+(attempt+1)+'/3)…';
      await new Promise(resolve=>setTimeout(resolve,1200*attempt));
      continue;
     }
-    if(!uploaded)throw new Error(shot.name+': '+reason);
+    if(!uploaded)break;
    }
-   if(!uploaded)throw new Error(shot.name+': '+(lastError?.message||'Upload failed after 3 attempts'));
+   if(!uploaded){
+    const reason=lastError?.message||String(lastError||'Unknown upload error');
+    if(/failed to fetch|network|timeout/i.test(reason)){
+     if(status)status.textContent='Secure upload connection dobara khol rahe hain…';
+     try{
+      await uploadScreenshotXHR(path,shot,accessToken);
+      paths.push(path);
+      uploaded=true;
+     }catch(xhrError){
+      try{
+       const check=await sb.storage.from('app-screenshots').createSignedUrl(path,60);
+       if(!check.error){paths.push(path);uploaded=true;}
+       else throw xhrError;
+      }catch(_){throw new Error(shot.name+': '+(xhrError?.message||String(xhrError))+'; SDK error: '+reason);}
+     }
+    }else{
+     throw new Error(shot.name+': '+reason);
+    }
+   }
+   if(!uploaded)throw new Error(shot.name+': Upload complete nahin hui.');
    if(status)status.textContent='Screenshot '+(i+1)+'/'+files.length+' upload ho gaya.';
   }
   if($(statusId))$(statusId).textContent=files.length+' screenshot(s) successfully upload ho gaye.';
@@ -355,7 +389,7 @@ async function uploadScreenshotFiles(files,appId,statusId){
  }catch(err){
   if(paths.length)await sb.storage.from('app-screenshots').remove(paths);
   const reason=err?.message||String(err);
-  throw new Error('Screenshot upload nahin hua: '+reason+'. Network dobara check karein; har file 10 MB ya us se kam honi chahiye.');
+  throw new Error('Screenshot upload nahin hua: '+reason+'. Har file 10 MB ya us se kam honi chahiye.');
  }
 }
 function bindImagePreview(inputId,previewId,isMultiple=false){
