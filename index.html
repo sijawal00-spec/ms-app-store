@@ -326,7 +326,9 @@ async function submitAdminScannedApp(e){
  try{
   await requireClient();
   if(!currentUser||!isAdmin)throw new Error('Admin access required.');
-  if(!pendingAdminApkPath)throw new Error('Pehle APK upload aur scan karein.');
+  pendingAdminApkPath=pendingAdminApkPath||sessionStorage.getItem('msAdminPendingApkPath')||null;
+  pendingAdminApkSize=pendingAdminApkSize||Number(sessionStorage.getItem('msAdminPendingApkSize')||0);
+  if(!pendingAdminApkPath)throw new Error('APK upload ka saved record nahin mila. Admin Dashboard par wapas ja kar APK dobara Upload & Scan karein; scan complete hone ke baad isi page par Publish App dabayein.');
   const f=new FormData(e.currentTarget),icon=f.get('icon'),shots=[...(f.getAll('screenshots')||[])].filter(x=>x&&x.size);
   let iconPath=null;
   if(icon&&icon.size){
