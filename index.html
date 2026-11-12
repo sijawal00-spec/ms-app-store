@@ -384,7 +384,8 @@ async function showUserDashboard(){try{await requireClient();if(!currentUser){vi
 async function loadMyApps(){
  const {data,error}=await sb.from('apps').select('id,user_id,name,developer_name,app_type,category,version,description,package_name,icon_path,apk_path,apk_size_bytes,status,admin_comment,rejection_reason,submitted_at,review_deadline').eq('user_id',currentUser.id).order('submitted_at',{ascending:false});
  if(error){$('myApps').innerHTML=`<div class="notice error">${escapeHtml(error.message)}</div>`;return;}
- const rows=data||[];
+ // Admin ke apne published apps sirf Store/Admin Dashboard mein rahenge, My Dashboard mein nahin.
+ const rows=isAdmin?[]:(data||[]);
  $('userStats').innerHTML=[['Total',rows.length],['Pending',rows.filter(x=>x.status==='pending').length],['Approved',rows.filter(x=>x.status==='approved').length],['Rejected',rows.filter(x=>x.status==='rejected').length]].map(([n,v])=>`<div class="stat"><span class="small">${n}</span><b>${v}</b></div>`).join('');
  $('myApps').innerHTML=rows.length?rows.map(a=>{const st=statusLabel(a.status,a.review_deadline);return `<div class="item"><div class="row between"><b>${escapeHtml(a.name)}</b><span class="status ${st}">${nice(st)}</span></div><div class="small">${escapeHtml(a.category)} · v${escapeHtml(a.version)} · Submitted ${new Date(a.submitted_at).toLocaleString()}</div><div class="deadline">48-hour deadline: ${new Date(a.review_deadline).toLocaleString()}</div>${a.admin_comment?`<p>Admin comment: ${escapeHtml(a.admin_comment)}</p>`:''}${a.rejection_reason?`<p class="error">Reason: ${escapeHtml(a.rejection_reason)}</p>`:''}<div class="actions"><button class="secondary" onclick="openUserOwnedApp('${a.id}')">Open App Page / Manage</button><button class="gold" onclick="toggleDashboardScreenshotManager('${a.id}','user')">Replace Screenshots</button></div><div id="dash-shot-${a.id}"></div></div>`}).join(''):'<div class="empty">You have not submitted any apps yet.</div>';
 }
