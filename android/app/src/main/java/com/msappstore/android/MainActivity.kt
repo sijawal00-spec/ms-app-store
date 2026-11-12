@@ -194,6 +194,7 @@ private fun StoreShell(
     onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit
 ) {
     Column(Modifier.fillMaxSize().background(DeepBlack)) {
+        Box(Modifier.weight(1f).fillMaxWidth()) {
         when (selectedTab) {
             "Search" -> SearchPage(
                 apps, loading, error, search, onSearch, selectedCategory, onCategory,
@@ -203,6 +204,7 @@ private fun StoreShell(
             else -> HomePage(
                 apps, loading, error, selectedTab, onRefresh, onSelect
             )
+        }
         }
         BottomNavigation(selectedTab, onTab)
     }
@@ -215,7 +217,7 @@ private fun HomePage(
 ) {
     val gamesOnly = tab == "Games"
     val shown = apps.filter { (it.appType.equals("game", true)) == gamesOnly }
-    Column(Modifier.fillMaxSize().weight(1f)) {
+    Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -249,7 +251,7 @@ private fun SearchPage(
                 .any { it.contains(search, true) })
     }
     LazyColumn(
-        modifier = Modifier.fillMaxSize().weight(1f),
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 12.dp)
     ) {
         item {
@@ -408,7 +410,7 @@ private fun AppRow(app: StoreApp, onSelect: (StoreApp) -> Unit) {
 @Composable
 private fun ProfilePage() {
     Column(
-        Modifier.fillMaxSize().weight(1f).padding(20.dp),
+        Modifier.fillMaxSize().padding(20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(Modifier.height(28.dp))
