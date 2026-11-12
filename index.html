@@ -116,8 +116,8 @@ async function renderStore(items){
   const iconUrl=await signedAsset('app-screenshots',a.icon_path);
   const shotPaths=shotsByApp[a.id]||[];
   const shotUrls=(await Promise.all(shotPaths.map(p=>signedAsset('app-screenshots',p)))).filter(Boolean);
-  const icon=iconUrl?'<img src="'+escapeHtml(iconUrl)+'" alt="'+escapeHtml(a.name)+' icon" loading="lazy">':'📦';
-  const shots=shotUrls.length?'<div class="screenshot-strip" aria-label="App screenshots">'+shotUrls.map((u,i)=>'<img src="'+escapeHtml(u)+'" alt="'+escapeHtml(a.name)+' screenshot '+(i+1)+'" loading="lazy">').join('')+'</div>':'<div class="screenshot-empty">No screenshots uploaded</div>';
+  const icon=iconUrl?'<img src="'+escapeHtml(iconUrl)+'" alt="'+escapeHtml(a.name)+' icon" loading="lazy" onerror="this.parentElement.textContent=\'📦\'">':'📦';
+  const shots=shotUrls.length?'<div class="screenshot-strip" aria-label="App screenshots">'+shotUrls.map((u,i)=>'<img src="'+escapeHtml(u)+'" alt="'+escapeHtml(a.name)+' screenshot '+(i+1)+'" loading="lazy" onerror="this.remove()">').join('')+'</div>':'<div class="screenshot-empty">No screenshots uploaded</div>';
   const desc=escapeHtml(a.description||'No description available.');
   return '<article class="card" role="button" tabindex="0" onclick="openPublicApp(\''+a.id+'\')" onkeydown="if(event.key===\'Enter\')openPublicApp(\''+a.id+'\')"><div class="appicon">'+icon+'</div><button class="install-btn card-install" onclick="event.stopPropagation();downloadApp(\''+a.id+'\')">Install</button><div class="rating-stars" aria-label="Five-star rating; no ratings yet">☆☆☆☆☆ <span>No ratings yet</span></div>'+shots+'<h3>'+escapeHtml(a.name)+'</h3><div class="meta">'+escapeHtml(a.category||'')+' · v'+escapeHtml(a.version||'')+' · '+escapeHtml(a.developer_name||'Developer')+'</div><div class="download-count">Downloads: —</div></article>';
  }));
@@ -126,20 +126,35 @@ async function renderStore(items){
 
 
 let categoryDirectoryType='apps';
-function renderCategoryAppCards(rows){
+async function renderCategoryAppCards(rows){
  const box=$('categoryPageApps');box.innerHTML='';
  if(!rows.length){box.innerHTML='<div class="empty">No published apps in this category yet.</div>';return;}
- rows.forEach(a=>{
+ const ids=rows.map(a=>a.id);
+ let shotsByApp={};
+ const shotRes=await sb.from('app_screenshots').select('app_id,storage_path').in('app_id',ids).order('created_at',{ascending:true});
+ if(!shotRes.error){for(const sh of (shotRes.data||[])){(shotsByApp[sh.app_id] ||= []).push(sh.storage_path);}}
+ const cards=await Promise.all(rows.map(async a=>{
+  const iconUrl=await signedAsset('app-screenshots',a.icon_path);
+  const shotUrls=(await Promise.all((shotsByApp[a.id]||[]).map(p=>signedAsset('app-screenshots',p)))).filter(Boolean);
   const card=document.createElement('article');card.className='card';card.setAttribute('role','button');card.tabIndex=0;
   card.addEventListener('click',()=>window.openPublicApp(a.id));
   card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();window.openPublicApp(a.id);}});
-  const icon=document.createElement('div');icon.className='appicon';icon.textContent=(a.name||'A').slice(0,1).toUpperCase();
+  const icon=document.createElement('div');icon.className='appicon';
+  if(iconUrl){const img=document.createElement('img');img.src=iconUrl;img.alt=(a.name||'App')+' icon';img.loading='lazy';img.addEventListener('error',()=>{icon.textContent='📦';});icon.appendChild(img);}
+  else icon.textContent='📦';
   const title=document.createElement('h3');title.textContent=a.name||'Untitled app';
   const meta=document.createElement('div');meta.className='meta';meta.textContent=(a.developer_name||'')+' · v'+(a.version||'');
+  const shots=document.createElement('div');shots.className='screenshot-strip';shots.setAttribute('aria-label','App screenshots');
+  shotUrls.forEach((url,i)=>{const img=document.createElement('img');img.src=url;img.alt=(a.name||'App')+' screenshot '+(i+1);img.loading='lazy';img.addEventListener('error',()=>img.remove());shots.appendChild(img);});
+  if(!shotUrls.length){const empty=document.createElement('div');empty.className='screenshot-empty';empty.textContent='No screenshots uploaded';}
   const button=document.createElement('button');button.className='secondary';button.textContent='View App';
   button.addEventListener('click',e=>{e.stopPropagation();window.openPublicApp(a.id);});
-  card.append(icon,title,meta,button);box.appendChild(card);
- });
+  card.append(icon,title,meta);
+  if(shotUrls.length)card.appendChild(shots);
+  card.appendChild(button);
+  return card;
+ }));
+ cards.forEach(card=>box.appendChild(card));
 }
 function openCategoryPage(category,type=categoryDirectoryType){
  activeCategory=type;selectedCategory=category;
@@ -179,14 +194,14 @@ async function showAppDetails(a,adminMode){
  const sr=await sb.from('app_screenshots').select('storage_path').eq('app_id',a.id).order('created_at',{ascending:true});
  const paths=sr.error?[]:(sr.data||[]).map(x=>x.storage_path);
  const urls=(await Promise.all(paths.map(p=>signedAsset('app-screenshots',p)))).filter(Boolean);
- const shots=urls.length?'<div class="screenshot-strip detail-screenshots">'+urls.map((u,i)=>'<img src="'+escapeHtml(u)+'" alt="Screenshot '+(i+1)+'">').join('')+'</div>':'<div class="screenshot-empty">No screenshots uploaded.</div>';
+ const shots=urls.length?'<div class="screenshot-strip detail-screenshots">'+urls.map((u,i)=>'<img src="'+escapeHtml(u)+'" alt="Screenshot '+(i+1)+'" onerror="this.remove()">').join('')+'</div>':'<div class="screenshot-empty">No screenshots uploaded.</div>';
  const apkLink=adminMode?'<button class="secondary" onclick="openAdminApk(\''+a.id+'\')">Open submitted APK</button>':(isPublished?'<button class="install-btn" onclick="downloadApp(\''+a.id+'\')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM11 3h2v9l3.5-3.5 1.4 1.4L12 17l-5.9-7.1 1.4-1.4L11 12V3z"/></svg>Install / Download APK</button>':'<div class="small">App approval ke baad install ke liye available hogi.</div>');
  let updateArea='';
  if(!adminMode&&isPublished){
   const {data:update}=await sb.from('app_updates').select('id,version,version_code,reviewed_at').eq('app_id',a.id).eq('status','approved').order('reviewed_at',{ascending:false}).limit(1).maybeSingle();
   updateArea='<h2>New Update</h2><div id="appUpdateArea">'+(update?'<div class="notice"><b>New Update Available</b><div>Version '+escapeHtml(update.version)+(update.version_code?' · Code '+escapeHtml(update.version_code):'')+'</div><div class="actions"><button id="downloadAppUpdateBtn" data-update-id="'+escapeHtml(update.id)+'">Download New Update</button></div></div>':'<div class="small">No approved update is available right now.</div>')+'<div class="actions"><button class="secondary" id="submitAppUpdateBtn">New Update</button></div></div>';
  }
- $('appDetailContent').innerHTML='<div class="detail-head"><div class="detail-icon-stack"><div class="appicon">'+(iconUrl?'<img src="'+escapeHtml(iconUrl)+'" alt="App icon">':'📦')+'</div>'+apkLink+'</div><div><h1>'+escapeHtml(a.name)+'</h1><div class="meta">'+escapeHtml(a.category||'')+' · v'+escapeHtml(a.version||'')+' · '+escapeHtml(a.developer_name||'Developer')+'</div><span class="status '+escapeHtml(a.status||'approved')+'">'+escapeHtml(nice(a.status||'approved'))+'</span><div class="rating-stars detail-rating" aria-label="Five-star rating; no ratings yet">☆☆☆☆☆ <span>No ratings yet</span></div></div></div><h2>Screenshots</h2>'+shots+'<div class="detail-meta"><div><b>Developer</b>'+escapeHtml(a.developer_name||'—')+'</div><div><b>Package name</b>'+escapeHtml(a.package_name||'—')+'</div><div><b>App type</b>'+escapeHtml(a.app_type||'—')+'</div><div><b>Version</b>'+escapeHtml(a.version||'—')+'</div><div><b>Category</b>'+escapeHtml(a.category||'—')+'</div>'+(adminMode?'<div><b>Submitter User ID</b>'+escapeHtml(a.user_id||'—')+'</div><div><b>Submitted</b>'+escapeHtml(a.submitted_at?new Date(a.submitted_at).toLocaleString():'—')+'</div><div><b>Review deadline</b>'+escapeHtml(a.review_deadline?new Date(a.review_deadline).toLocaleString():'—')+'</div><div><b>APK size</b>'+escapeHtml(a.apk_size_bytes?(a.apk_size_bytes/1048576).toFixed(2)+' MB':'—')+'</div>':'<div><b>Downloads</b>—</div>')+'</div>'+updateArea+'<h2>Full Description</h2><div class="detail-description">'+escapeHtml(a.description||'No description available.')+'</div>';
+ $('appDetailContent').innerHTML='<div class="detail-head"><div class="detail-icon-stack"><div class="appicon">'+(iconUrl?'<img src="'+escapeHtml(iconUrl)+'" alt="App icon" onerror="this.parentElement.textContent=\'📦\'">':'📦')+'</div>'+apkLink+'</div><div><h1>'+escapeHtml(a.name)+'</h1><div class="meta">'+escapeHtml(a.category||'')+' · v'+escapeHtml(a.version||'')+' · '+escapeHtml(a.developer_name||'Developer')+'</div><span class="status '+escapeHtml(a.status||'approved')+'">'+escapeHtml(nice(a.status||'approved'))+'</span><div class="rating-stars detail-rating" aria-label="Five-star rating; no ratings yet">☆☆☆☆☆ <span>No ratings yet</span></div></div></div><h2>Screenshots</h2>'+shots+'<div class="detail-meta"><div><b>Developer</b>'+escapeHtml(a.developer_name||'—')+'</div><div><b>Package name</b>'+escapeHtml(a.package_name||'—')+'</div><div><b>App type</b>'+escapeHtml(a.app_type||'—')+'</div><div><b>Version</b>'+escapeHtml(a.version||'—')+'</div><div><b>Category</b>'+escapeHtml(a.category||'—')+'</div>'+(adminMode?'<div><b>Submitter User ID</b>'+escapeHtml(a.user_id||'—')+'</div><div><b>Submitted</b>'+escapeHtml(a.submitted_at?new Date(a.submitted_at).toLocaleString():'—')+'</div><div><b>Review deadline</b>'+escapeHtml(a.review_deadline?new Date(a.review_deadline).toLocaleString():'—')+'</div><div><b>APK size</b>'+escapeHtml(a.apk_size_bytes?(a.apk_size_bytes/1048576).toFixed(2)+' MB':'—')+'</div>':'<div><b>Downloads</b>—</div>')+'</div>'+updateArea+'<h2>Full Description</h2><div class="detail-description">'+escapeHtml(a.description||'No description available.')+'</div>';
  view('appDetail');
  if(!adminMode&&isPublished){
   const submitButton=$('submitAppUpdateBtn');if(submitButton)submitButton.onclick=()=>window.startAppUpdate(a.id);
