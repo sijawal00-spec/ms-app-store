@@ -162,34 +162,60 @@ window.openPublicApp=async id=>{try{const a=publishedApps.find(x=>String(x.id)==
 window.openAdminAppDetails=async id=>{try{if(!currentUser||!isAdmin)throw new Error('Admin access required.');const {data,error}=await sb.from('apps').select('id,user_id,name,developer_name,app_type,category,version,description,package_name,icon_path,apk_path,apk_size_bytes,status,admin_comment,rejection_reason,submitted_at,review_deadline').eq('id',id).single();if(error)throw error;await showAppDetails(data,true);}catch(e){msg('App details error: '+e.message,true);}};
 window.openAdminApk=async id=>{try{const {data,error}=await sb.from('apps').select('apk_path').eq('id',id).single();if(error)throw error;const {data:link,error:e}=await sb.storage.from('app-apks').createSignedUrl(data.apk_path,300,{download:true});if(e)throw e;window.open(link.signedUrl,'_blank');}catch(e){msg(e.message,true);}};
 
+let pendingUpdatePath=null,pendingUpdateMeta=null;
 window.startAppUpdate=async appId=>{
  try{
   if(!currentUser){view('account');msg('Update submit karne ke liye pehle sign in karein.');return;}
   const app=currentDetailApp;
   if(!app||String(app.id)!==String(appId))throw new Error('App detail dobara open karein.');
-  $('appUpdateArea').innerHTML='<form id="appUpdateForm" class="formgrid"><div class="full"><label>Select new APK (max 100 MB)</label><input id="appUpdateFile" type="file" accept=".apk,application/vnd.android.package-archive" required></div><div class="full"><button type="submit" id="appUpdateSubmit">Upload, Scan & Submit Update</button> <button type="button" class="secondary" onclick="showAppDetails(currentDetailApp,false)">Cancel</button></div><div class="full small" id="appUpdateStatus"></div></form>';
+  pendingUpdatePath=null;pendingUpdateMeta=null;
+  $('appUpdateArea').innerHTML='<form id="appUpdateForm" class="formgrid"><div class="full"><label>Select new APK (max 100 MB)</label><input id="appUpdateFile" type="file" accept=".apk,application/vnd.android.package-archive" required></div><div class="full"><button type="button" id="scanAppUpdateBtn">Upload & Scan New Version</button> <button type="submit" id="appUpdateSubmit" disabled>Submit Update to Admin</button> <button type="button" class="secondary" id="cancelAppUpdateBtn">Cancel</button></div><div class="full notice hidden" id="appUpdatePreview"></div><div class="full small" id="appUpdateStatus">Pehle naya APK scan karein. Uske asli Version aur Version Code yahan dikhaye jayenge.</div></form>';
+  $('scanAppUpdateBtn').onclick=()=>scanAppUpdate(appId);
   $('appUpdateForm').onsubmit=e=>submitAppUpdate(e,appId);
+  $('cancelAppUpdateBtn').onclick=async()=>{if(pendingUpdatePath)await sb.storage.from('app-apks').remove([pendingUpdatePath]);pendingUpdatePath=null;pendingUpdateMeta=null;showAppDetails(app,false);};
  }catch(e){msg(e.message,true);}
 };
-async function submitAppUpdate(e,appId){
- e.preventDefault();let uploadedPath=null;
+async function scanAppUpdate(appId){
+ let path=null;
  try{
   if(!currentUser)throw new Error('Pehle sign in karein.');
   const app=currentDetailApp,file=$('appUpdateFile').files[0];
   if(!file||!file.name.toLowerCase().endsWith('.apk'))throw new Error('Sirf APK file select karein.');
   if(file.size>100*1024*1024)throw new Error('APK 100 MB se chhoti honi chahiye.');
-  $('appUpdateSubmit').disabled=true;$('appUpdateStatus').textContent='APK upload aur scan ho rahi hai…';
-  uploadedPath=currentUser.id+'/updates/'+crypto.randomUUID()+'.apk';
-  const up=await sb.storage.from('app-apks').upload(uploadedPath,file,{contentType:'application/vnd.android.package-archive',upsert:false});
+  $('scanAppUpdateBtn').disabled=true;$('appUpdateSubmit').disabled=true;$('appUpdateStatus').textContent='Naya APK upload aur scan ho raha hai…';
+  if(pendingUpdatePath)await sb.storage.from('app-apks').remove([pendingUpdatePath]);
+  path=currentUser.id+'/updates/'+crypto.randomUUID()+'.apk';
+  const up=await sb.storage.from('app-apks').upload(path,file,{contentType:'application/vnd.android.package-archive',upsert:false});
   if(up.error)throw up.error;
-  const submit=await sb.functions.invoke('submit-app-update',{body:{app_id:app.id,path:uploadedPath,file_name:file.name}});
+  const scan=await sb.functions.invoke('apk-metadata-scan',{body:{bucket:'app-apks',path,file_name:file.name,file_size:file.size}});
+  if(scan.error||!scan.data||scan.data.success!==true)throw new Error(scan.error?.message||scan.data?.error||'APK metadata scan failed.');
+  const m=scan.data.metadata||{};
+  if(!m.version_name||m.version_code===undefined||m.version_code===null||m.version_code==='')throw new Error('APK ka Version ya Version Code read nahi ho saka.');
+  pendingUpdatePath=path;path=null;pendingUpdateMeta=m;
+  const samePackage=m.package_name===app.package_name;
+  $('appUpdatePreview').classList.remove('hidden');
+  $('appUpdatePreview').innerHTML='<b>New APK Metadata</b><br>App: '+escapeHtml(m.app_name||file.name)+'<br>Package: '+escapeHtml(m.package_name||'Not found')+'<br><b>New Version: '+escapeHtml(m.version_name)+'</b><br><b>New Version Code: '+escapeHtml(m.version_code)+'</b><br>Current Version: '+escapeHtml(app.version||'—')+'<br><span class="'+(samePackage?'':'error')+'">'+(samePackage?'Package name matches the published app.':'Package name does not match. This update cannot be submitted.')+'</span>';
+  $('appUpdateSubmit').disabled=!samePackage;
+  $('appUpdateStatus').textContent=samePackage?'Version details scanned successfully. Ab Submit Update to Admin dabayein.':'Package mismatch: update submit nahi ho sakta.';
+ }catch(err){
+  if(path)await sb.storage.from('app-apks').remove([path]);
+  $('appUpdateStatus').textContent=err.message;msg(err.message,true);
+ }finally{$('scanAppUpdateBtn').disabled=false;}
+}
+async function submitAppUpdate(e,appId){
+ e.preventDefault();
+ try{
+  if(!currentUser)throw new Error('Pehle sign in karein.');
+  const app=currentDetailApp;
+  if(!pendingUpdatePath||!pendingUpdateMeta)throw new Error('Pehle naya APK upload karke scan karein.');
+  $('appUpdateSubmit').disabled=true;$('appUpdateStatus').textContent='Update Admin ko submit ho rahi hai…';
+  const submit=await sb.functions.invoke('submit-app-update',{body:{app_id:app.id,path:pendingUpdatePath,file_name:$('appUpdateFile').files[0]?.name||'update.apk'}});
   if(submit.error||!submit.data||submit.data.success!==true)throw new Error(submit.error?.message||submit.data?.error||'Update submission failed.');
-  uploadedPath=null;msg('Package Name verify ho gaya. Update Admin review ke liye submit ho gaya. Purana APK safe hai.');
+  pendingUpdatePath=null;pendingUpdateMeta=null;
+  msg('Naya Version '+submit.data.update.version+' aur Version Code '+(pendingUpdateMeta?.version_code||'')+' Admin review ke liye submit ho gaya. Purana APK safe hai.');
   await showAppDetails(app,false);
  }catch(err){
-  if(uploadedPath)await sb.storage.from('app-apks').remove([uploadedPath]);
-  const status=$('appUpdateStatus');if(status)status.textContent=err.message;
-  msg(err.message,true);
+  $('appUpdateStatus').textContent=err.message;msg(err.message,true);
  }finally{const btn=$('appUpdateSubmit');if(btn)btn.disabled=false;}
 }
 window.downloadAppUpdate=async id=>{
