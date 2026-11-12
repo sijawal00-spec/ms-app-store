@@ -314,13 +314,40 @@ async function uploadScreenshotFiles(files,appId,statusId){
    const path=currentUser.id+'/'+appId+'/'+crypto.randomUUID()+'.'+ext;
    const status=$(statusId);
    if(status){status.textContent='Screenshot '+(i+1)+'/'+files.length+' upload ho raha hai…';status.classList.remove('error');}
-   const {data,error}=await sb.storage.from('app-screenshots').upload(path,shot,{
-    cacheControl:'3600',
-    contentType:shot.type||'application/octet-stream',
-    upsert:false
-   });
-   if(error)throw new Error(shot.name+': '+error.message);
-   paths.push(data?.path||path);
+   let uploaded=false,lastError=null;
+   for(let attempt=1;attempt<=3&&!uploaded;attempt++){
+    try{
+     const result=await sb.storage.from('app-screenshots').upload(path,shot,{
+      cacheControl:'3600',
+      contentType:shot.type||'application/octet-stream',
+      upsert:false
+     });
+     if(!result.error){
+      paths.push(result.data?.path||path);
+      uploaded=true;
+      break;
+     }
+     lastError=result.error;
+    }catch(err){lastError=err;}
+    const reason=lastError?.message||String(lastError||'Unknown upload error');
+    if(/failed to fetch|network|timeout|already exists|duplicate|409/i.test(reason)){
+     try{
+      const check=await sb.storage.from('app-screenshots').createSignedUrl(path,60);
+      if(!check.error){
+       paths.push(path);
+       uploaded=true;
+       break;
+      }
+     }catch(_){}
+    }
+    if(attempt<3&&/failed to fetch|network|timeout/i.test(reason)){
+     if(status)status.textContent='Network rukawat hui. Screenshot '+(i+1)+' ko dobara upload kar rahe hain ('+(attempt+1)+'/3)…';
+     await new Promise(resolve=>setTimeout(resolve,1200*attempt));
+     continue;
+    }
+    if(!uploaded)throw new Error(shot.name+': '+reason);
+   }
+   if(!uploaded)throw new Error(shot.name+': '+(lastError?.message||'Upload failed after 3 attempts'));
    if(status)status.textContent='Screenshot '+(i+1)+'/'+files.length+' upload ho gaya.';
   }
   if($(statusId))$(statusId).textContent=files.length+' screenshot(s) successfully upload ho gaye.';
@@ -328,7 +355,7 @@ async function uploadScreenshotFiles(files,appId,statusId){
  }catch(err){
   if(paths.length)await sb.storage.from('app-screenshots').remove(paths);
   const reason=err?.message||String(err);
-  throw new Error('Screenshot upload nahin hua: '+reason+'. File 10 MB se kam rakhein aur internet check karke dobara try karein.');
+  throw new Error('Screenshot upload nahin hua: '+reason+'. Network dobara check karein; har file 10 MB ya us se kam honi chahiye.');
  }
 }
 function bindImagePreview(inputId,previewId,isMultiple=false){
