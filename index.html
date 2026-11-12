@@ -532,6 +532,7 @@ async function startAdminApkScan(e){
 }
 async function submitAdminScannedApp(e){
  e.preventDefault();
+ const form=e.currentTarget;
  const status=$('adminScreenshotStatus');
  let uploadedShotPaths=[],uploadedIconPath=null,insertedAppId=null;
  try{
@@ -540,7 +541,7 @@ async function submitAdminScannedApp(e){
   pendingAdminApkPath=pendingAdminApkPath||sessionStorage.getItem('msAdminPendingApkPath')||null;
   pendingAdminApkSize=pendingAdminApkSize||Number(sessionStorage.getItem('msAdminPendingApkSize')||0);
   if(!pendingAdminApkPath)throw new Error('APK upload ka saved record nahin mila. Admin Dashboard par wapas ja kar APK dobara Upload & Scan karein; scan complete hone ke baad isi page par Publish App dabayein.');
-  const f=new FormData(e.currentTarget),icon=f.get('icon');
+  const f=new FormData(form),icon=f.get('icon');
   const shots=validateScreenshotFiles(f.getAll('screenshots'),'adminScreenshotStatus');
   const appId=crypto.randomUUID();
   uploadedShotPaths=await uploadScreenshotFiles(shots,appId,'adminScreenshotStatus');
@@ -558,7 +559,7 @@ async function submitAdminScannedApp(e){
    if(si.error)throw new Error('Screenshots upload ho gaye lekin app ke sath save nahin hue: '+si.error.message);
   }
   pendingAdminApk=null;pendingAdminApkPath=null;pendingAdminApkSize=0;adminScannedMeta=null;await removeDraft('admin');sessionStorage.removeItem('msAdminPendingApkPath');sessionStorage.removeItem('msAdminPendingApkSize');
-  e.currentTarget.reset();$('adminUploadForm').reset();
+  if(form&&form.isConnected)form.reset();
   if(status){status.textContent='';status.classList.remove('error');}
   msg('Admin APK aur '+uploadedShotPaths.length+' screenshot(s) store par publish ho gaye.');
   await loadAdmin();
