@@ -211,8 +211,9 @@ async function submitAppUpdate(e,appId){
   $('appUpdateSubmit').disabled=true;$('appUpdateStatus').textContent='Update Admin ko submit ho rahi hai…';
   const submit=await sb.functions.invoke('submit-app-update',{body:{app_id:app.id,path:pendingUpdatePath,file_name:$('appUpdateFile').files[0]?.name||'update.apk'}});
   if(submit.error||!submit.data||submit.data.success!==true)throw new Error(submit.error?.message||submit.data?.error||'Update submission failed.');
+  const submittedVersion=submit.data.update.version,submittedVersionCode=pendingUpdateMeta.version_code;
   pendingUpdatePath=null;pendingUpdateMeta=null;
-  msg('Naya Version '+submit.data.update.version+' aur Version Code '+(pendingUpdateMeta?.version_code||'')+' Admin review ke liye submit ho gaya. Purana APK safe hai.');
+  msg('Naya Version '+submittedVersion+' aur Version Code '+submittedVersionCode+' Admin review ke liye submit ho gaya. Purana APK safe hai.');
   await showAppDetails(app,false);
  }catch(err){
   $('appUpdateStatus').textContent=err.message;msg(err.message,true);
