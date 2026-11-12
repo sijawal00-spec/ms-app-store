@@ -294,42 +294,31 @@ function validateScreenshotFiles(files,statusId){
 async function uploadScreenshotFiles(files,appId,statusId){
  const paths=[];
  try{
-  if(files.length&&!window.tus?.Upload)throw new Error('Resumable upload library load nahin hui. Page refresh karke dobara try karein.');
-  const {data:{session},error:sessionError}=await sb.auth.getSession();
-  if(sessionError)throw sessionError;
-  if(!session?.access_token)throw new Error('Login session expire ho gaya. Dobara sign in karein.');
-  const endpoint=SUPABASE_URL.replace('.supabase.co','.storage.supabase.co')+'/storage/v1/upload/resumable';
+  if(files.length){
+   const {data:{session},error:sessionError}=await sb.auth.getSession();
+   if(sessionError)throw sessionError;
+   if(!session?.access_token)throw new Error('Login session expire ho gaya. Dobara sign in karein.');
+  }
   for(let i=0;i<files.length;i++){
    const shot=files[i],ext=shot.name.split('.').pop().toLowerCase();
    const path=currentUser.id+'/'+appId+'/'+crypto.randomUUID()+'.'+ext;
    const status=$(statusId);
    if(status){status.textContent='Screenshot '+(i+1)+'/'+files.length+' upload ho raha hai…';status.classList.remove('error');}
-   await new Promise((resolve,reject)=>{
-    const upload=new window.tus.Upload(shot,{
-     endpoint,
-     retryDelays:[0,3000,5000,10000,20000],
-     headers:{authorization:'Bearer '+session.access_token,apikey:SUPABASE_ANON_KEY},
-     uploadDataDuringCreation:true,
-     removeFingerprintOnSuccess:true,
-     chunkSize:6*1024*1024,
-     metadata:{bucketName:'app-screenshots',objectName:path,contentType:shot.type||'application/octet-stream',cacheControl:'3600'},
-     onError:error=>reject(error),
-     onProgress:(uploaded,total)=>{if(status)status.textContent='Screenshot '+(i+1)+'/'+files.length+' upload ho raha hai: '+Math.floor(uploaded/total*100)+'%';},
-     onSuccess:()=>resolve()
-    });
-    upload.findPreviousUploads().then(previous=>{
-     if(previous.length)upload.resumeFromPreviousUpload(previous[0]);
-     upload.start();
-    }).catch(reject);
+   const {data,error}=await sb.storage.from('app-screenshots').upload(path,shot,{
+    cacheControl:'3600',
+    contentType:shot.type||'application/octet-stream',
+    upsert:false
    });
-   paths.push(path);
+   if(error)throw new Error(shot.name+': '+error.message);
+   paths.push(data?.path||path);
+   if(status)status.textContent='Screenshot '+(i+1)+'/'+files.length+' upload ho gaya.';
   }
   if($(statusId))$(statusId).textContent=files.length+' screenshot(s) successfully upload ho gaye.';
   return paths;
  }catch(err){
   if(paths.length)await sb.storage.from('app-screenshots').remove(paths);
   const reason=err?.message||String(err);
-  throw new Error('Screenshot upload nahin hua: '+reason+'. Internet connection check karein; dobara try karne par upload resume/retry hoga.');
+  throw new Error('Screenshot upload nahin hua: '+reason+'. File 10 MB se kam rakhein aur internet check karke dobara try karein.');
  }
 }
 function bindImagePreview(inputId,previewId,isMultiple=false){
