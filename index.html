@@ -282,7 +282,7 @@ if(scan.error||!scan.data||scan.data.success===false){await sb.storage.from('app
 scannedMeta=scan.data.metadata||scan.data;$('metaName').value=scannedMeta.app_name||scannedMeta.name||file.name.replace(/\.apk$/i,'');$('metaPackage').value=scannedMeta.package_name||'';$('metaVersion').value=scannedMeta.version_name||scannedMeta.version||'1.0.0';$('metaVersionCode').value=scannedMeta.version_code??'';$('scanSummary').textContent='APK scan complete · '+(scannedMeta.package_name||'Package not found')+' · '+(scannedMeta.version_name||scannedMeta.version||'Version unknown')+' · '+(file.size/1024/1024).toFixed(2)+' MB. Extracted fields editable hain.';view('details');$('scanStatus').textContent='';}catch(err){$('scanStatus').textContent=err.message;msg(err.message,true);}finally{$('scanApkBtn').disabled=false;}}
 async function submitScannedApp(e){e.preventDefault();try{await requireClient();if(!currentUser||!pendingApkPath)throw new Error('Pehle APK upload aur scan karein.');const f=new FormData(e.currentTarget);const icon=f.get('icon'),shots=[...(f.getAll('screenshots')||[])].filter(x=>x&&x.size);let iconPath=scannedMeta?.icon_path||null;if(icon&&icon.size){const ext=icon.name.split('.').pop().toLowerCase(),path=currentUser.id+'/'+crypto.randomUUID()+'.'+ext;const u=await sb.storage.from('app-screenshots').upload(path,icon,{upsert:false});if(u.error)throw u.error;iconPath=path;}
 const appId=crypto.randomUUID();const row={id:appId,user_id:currentUser.id,name:f.get('name').trim(),developer_name:f.get('developer_name').trim(),app_type:f.get('app_type'),category:f.get('category'),version:f.get('version').trim(),package_name:f.get('package_name').trim(),description:f.get('description').trim(),icon_path:iconPath,apk_path:pendingApkPath,apk_size_bytes:pendingApk.size,status:'pending'};const ins=await sb.from('apps').insert(row);if(ins.error)throw ins.error;for(const shot of shots.slice(0,5)){if(shot.size>10*1024*1024)continue;const ext=shot.name.split('.').pop().toLowerCase(),path=currentUser.id+'/'+appId+'/'+crypto.randomUUID()+'.'+ext;const up=await sb.storage.from('app-screenshots').upload(path,shot,{upsert:false});if(up.error)continue;const si=await sb.from('app_screenshots').insert({app_id:appId,user_id:currentUser.id,storage_path:path});if(si.error)console.warn(si.error.message);}pendingApk=null;pendingApkPath=null;scannedMeta=null;e.currentTarget.reset();$('firstApkFile').value='';msg('Aapki app Admin ko submit ho gayi. Admin ko 48 ghante ke andar approve, reject ya comment karna hoga.');await showUserDashboard();}catch(err){msg('Submit error: '+err.message,true);}}
-let pendingAdminApk=null,pendingAdminApkPath=null,adminScannedMeta=null;
+let pendingAdminApk=null,pendingAdminApkPath=sessionStorage.getItem('msAdminPendingApkPath')||null,pendingAdminApkSize=Number(sessionStorage.getItem('msAdminPendingApkSize')||0),adminScannedMeta=null;
 async function startAdminApkScan(e){
  e.preventDefault();
  try{
@@ -298,10 +298,13 @@ async function startAdminApkScan(e){
   if(up.error)throw up.error;
   pendingAdminApk=file;
   pendingAdminApkPath=path;
+  pendingAdminApkSize=file.size;
+  sessionStorage.setItem('msAdminPendingApkPath',path);
+  sessionStorage.setItem('msAdminPendingApkSize',String(file.size));
   const scan=await sb.functions.invoke('apk-metadata-scan',{body:{bucket:'app-apks',path,file_name:file.name,file_size:file.size}});
   if(scan.error||!scan.data||scan.data.success===false){
    await sb.storage.from('app-apks').remove([path]);
-   pendingAdminApk=null;pendingAdminApkPath=null;
+   pendingAdminApk=null;pendingAdminApkPath=null;pendingAdminApkSize=0;sessionStorage.removeItem('msAdminPendingApkPath');sessionStorage.removeItem('msAdminPendingApkSize');
    throw new Error('APK upload ho gayi, lekin scan complete nahin hua: '+(scan.error?.message||scan.data?.error||'Unknown scanner error'));
   }
   adminScannedMeta=scan.data.metadata||scan.data;
@@ -323,7 +326,7 @@ async function submitAdminScannedApp(e){
  try{
   await requireClient();
   if(!currentUser||!isAdmin)throw new Error('Admin access required.');
-  if(!pendingAdminApkPath||!pendingAdminApk)throw new Error('Pehle APK upload aur scan karein.');
+  if(!pendingAdminApkPath)throw new Error('Pehle APK upload aur scan karein.');
   const f=new FormData(e.currentTarget),icon=f.get('icon'),shots=[...(f.getAll('screenshots')||[])].filter(x=>x&&x.size);
   let iconPath=null;
   if(icon&&icon.size){
@@ -333,7 +336,7 @@ async function submitAdminScannedApp(e){
    iconPath=path;
   }
   const appId=crypto.randomUUID();
-  const row={id:appId,user_id:currentUser.id,name:f.get('name').trim(),developer_name:f.get('developer_name').trim(),app_type:f.get('app_type'),category:f.get('category'),version:f.get('version').trim(),package_name:f.get('package_name').trim(),description:f.get('description').trim(),icon_path:iconPath,apk_path:pendingAdminApkPath,apk_size_bytes:pendingAdminApk.size,status:'approved',reviewed_by:currentUser.id,reviewed_at:new Date().toISOString()};
+  const row={id:appId,user_id:currentUser.id,name:f.get('name').trim(),developer_name:f.get('developer_name').trim(),app_type:f.get('app_type'),category:f.get('category'),version:f.get('version').trim(),package_name:f.get('package_name').trim(),description:f.get('description').trim(),icon_path:iconPath,apk_path:pendingAdminApkPath,apk_size_bytes:pendingAdminApkSize||pendingAdminApk?.size||0,status:'approved',reviewed_by:currentUser.id,reviewed_at:new Date().toISOString()};
   const ins=await sb.from('apps').insert(row);
   if(ins.error)throw ins.error;
   for(const shot of shots.slice(0,5)){
@@ -343,7 +346,7 @@ async function submitAdminScannedApp(e){
    if(up.error)continue;
    await sb.from('app_screenshots').insert({app_id:appId,user_id:currentUser.id,storage_path:path});
   }
-  pendingAdminApk=null;pendingAdminApkPath=null;adminScannedMeta=null;
+  pendingAdminApk=null;pendingAdminApkPath=null;pendingAdminApkSize=0;adminScannedMeta=null;sessionStorage.removeItem('msAdminPendingApkPath');sessionStorage.removeItem('msAdminPendingApkSize');
   e.currentTarget.reset();$('adminUploadForm').reset();
   msg('Admin APK scan complete aur app store par publish ho gayi.');
   await loadAdmin();
