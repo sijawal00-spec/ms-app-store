@@ -12,17 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -32,17 +22,10 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +50,21 @@ private val Gold = Color(0xFFFFC857)
 private val Muted = Color(0xFF9BAFA5)
 private val DownloadBlue = Color(0xFF2196F3)
 
+private val appCategories = listOf(
+    "Art & Design", "Auto & Vehicles", "Beauty", "Books & Reference", "Business",
+    "Comics", "Communication", "Dating", "Education", "Entertainment", "Events",
+    "Finance", "Food & Drink", "Health & Fitness", "House & Home", "Libraries & Demo",
+    "Lifestyle", "Maps & Navigation", "Medical", "Music & Audio", "News & Magazines",
+    "Parenting", "Personalization", "Photography", "Productivity", "Shopping", "Social",
+    "Sports", "Tools", "Travel & Local", "Video Players & Editors", "Weather", "Downloader"
+)
+private val gameCategories = listOf(
+    "Action", "Adventure", "Arcade", "Board", "Card", "Casino", "Casual",
+    "Educational", "Music", "Puzzle", "Racing", "Role Playing", "Simulation",
+    "Sports", "Strategy", "Trivia", "Word"
+)
+private val allCategories = appCategories + gameCategories
+
 class MainActivity : ComponentActivity() {
     private val repository = StoreRepository()
     private var apps by mutableStateOf<List<StoreApp>>(emptyList())
@@ -74,7 +72,8 @@ class MainActivity : ComponentActivity() {
     private var error by mutableStateOf<String?>(null)
     private var selectedApp by mutableStateOf<StoreApp?>(null)
     private var search by mutableStateOf("")
-    private var filter by mutableStateOf("All")
+    private var selectedTab by mutableStateOf("Apps")
+    private var selectedCategory by mutableStateOf("All")
     private var downloadProgress by mutableStateOf<Map<String, Int>>(emptyMap())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,15 +86,26 @@ class MainActivity : ComponentActivity() {
                 onBackground = Color.White, onSurface = Color.White
             )) {
                 Surface(Modifier.fillMaxSize(), color = DeepBlack) {
-                    if (selectedApp == null) StoreHome(
-                        apps = apps, loading = loading, error = error,
-                        search = search, onSearch = { search = it },
-                        filter = filter, onFilter = { filter = it },
-                        onRefresh = { loadApps() }, onSelect = { selectedApp = it }
-                    ) else AppDetails(
-                        app = selectedApp!!, progress = downloadProgress[selectedApp!!.id],
-                        onBack = { selectedApp = null }, onInstall = { startDownload(selectedApp!!) }
-                    )
+                    if (selectedApp == null) {
+                        StoreShell(
+                            apps = apps, loading = loading, error = error,
+                            search = search, onSearch = { search = it },
+                            selectedTab = selectedTab, onTab = {
+                                selectedTab = it
+                                if (it != "Search") { search = ""; selectedCategory = "All" }
+                            },
+                            selectedCategory = selectedCategory,
+                            onCategory = { selectedCategory = it },
+                            onRefresh = { loadApps() },
+                            onSelect = { selectedApp = it }
+                        )
+                    } else {
+                        AppDetails(
+                            app = selectedApp!!, progress = downloadProgress[selectedApp!!.id],
+                            onBack = { selectedApp = null },
+                            onInstall = { startDownload(selectedApp!!) }
+                        )
+                    }
                 }
             }
         }
@@ -176,71 +186,267 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun StoreHome(
+private fun StoreShell(
     apps: List<StoreApp>, loading: Boolean, error: String?,
     search: String, onSearch: (String) -> Unit,
-    filter: String, onFilter: (String) -> Unit,
+    selectedTab: String, onTab: (String) -> Unit,
+    selectedCategory: String, onCategory: (String) -> Unit,
     onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit
 ) {
-    val shown = apps.filter {
-        (filter == "All" || (filter == "Games" && it.appType == "game") || (filter == "Apps" && it.appType != "game")) &&
-            (search.isBlank() || listOf(it.name, it.developerName, it.category, it.description).any { value -> value.contains(search, true) })
-    }
     Column(Modifier.fillMaxSize().background(DeepBlack)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+        when (selectedTab) {
+            "Search" -> SearchPage(
+                apps, loading, error, search, onSearch, selectedCategory, onCategory,
+                onRefresh, onSelect
+            )
+            "You" -> ProfilePage()
+            else -> HomePage(
+                apps, loading, error, selectedTab, onRefresh, onSelect
+            )
+        }
+        BottomNavigation(selectedTab, onTab)
+    }
+}
+
+@Composable
+private fun HomePage(
+    apps: List<StoreApp>, loading: Boolean, error: String?,
+    tab: String, onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit
+) {
+    val gamesOnly = tab == "Games"
+    val shown = apps.filter { (it.appType.equals("game", true)) == gamesOnly }
+    Column(Modifier.fillMaxSize().weight(1f)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Column(Modifier.weight(1f)) {
                 Text("MS App Store", color = Gold, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-                Text("Discover apps & games", color = Muted, fontSize = 12.sp)
+                Text(if (gamesOnly) "Discover games" else "Discover apps", color = Muted, fontSize = 12.sp)
             }
-            IconButton(onClick = { }) { Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = Gold) }
+            IconButton(onClick = onRefresh) {
+                Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = Gold)
+            }
         }
-        OutlinedTextField(
-            value = search, onValueChange = onSearch, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            placeholder = { Text("Search apps and games") }, leadingIcon = { Icon(Icons.Default.Search, null) },
-            singleLine = true, shape = RoundedCornerShape(16.dp)
-        )
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("All", "Apps", "Games").forEach { item ->
-                val selected = filter == item
-                Surface(color = if (selected) Emerald else DeepGreen, shape = CircleShape,
-                    modifier = Modifier.clickable { onFilter(item) }) {
-                    Text(item, color = if (selected) DeepBlack else Color.White,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp), fontWeight = FontWeight.SemiBold)
+        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CategoryPill("Top charts", false) { }
+            CategoryPill("Categories", false) { }
+        }
+        StoreContent(shown, loading, error, onRefresh, onSelect)
+    }
+}
+
+@Composable
+private fun SearchPage(
+    apps: List<StoreApp>, loading: Boolean, error: String?,
+    search: String, onSearch: (String) -> Unit,
+    selectedCategory: String, onCategory: (String) -> Unit,
+    onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit
+) {
+    val shown = apps.filter { app ->
+        (selectedCategory == "All" || app.category.equals(selectedCategory, true)) &&
+            (search.isBlank() || listOf(app.name, app.developerName, app.category, app.description)
+                .any { it.contains(search, true) })
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().weight(1f),
+        contentPadding = PaddingValues(bottom = 12.dp)
+    ) {
+        item {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Search", color = Gold, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onRefresh) {
+                    Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = Gold)
                 }
             }
-            Spacer(Modifier.weight(1f))
-            Text("↻", color = Gold, modifier = Modifier.clickable { onRefresh() }.padding(8.dp), fontSize = 20.sp)
+            OutlinedTextField(
+                value = search, onValueChange = onSearch,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                placeholder = { Text("Search apps & games") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                singleLine = true, shape = RoundedCornerShape(24.dp)
+            )
+            Text(
+                "All Categories", color = Color.White, fontSize = 18.sp,
+                fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 18.dp, top = 22.dp, bottom = 10.dp)
+            )
+            CategoryPill("All", selectedCategory == "All") { onCategory("All") }
+            Spacer(Modifier.height(8.dp))
         }
-        when {
-            loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Emerald) }
-            error != null -> Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Store could not load", color = Color.White, fontWeight = FontWeight.Bold)
-                Text(error, color = Muted, modifier = Modifier.padding(vertical = 10.dp))
-                Button(onClick = onRefresh, colors = ButtonDefaults.buttonColors(containerColor = Emerald)) { Text("Retry", color = DeepBlack) }
-            }
-            shown.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No published apps found.", color = Muted) }
-            else -> LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(shown, key = { it.id }) { app ->
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(DeepGreen)
-                            .clickable { onSelect(app) }.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (app.iconUrl != null) AsyncImage(app.iconUrl, contentDescription = app.name,
-                            modifier = Modifier.size(64.dp).clip(RoundedCornerShape(15.dp)), contentScale = ContentScale.Crop)
-                        else Box(Modifier.size(64.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xFF173B2B)), contentAlignment = Alignment.Center) {
-                            Text("MS", color = Gold, fontWeight = FontWeight.ExtraBold)
-                        }
-                        Column(Modifier.weight(1f).padding(start = 13.dp)) {
-                            Text(app.name, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(app.developerName, color = Muted, fontSize = 12.sp)
-                            Text("${app.category} · v${app.version}", color = Gold, fontSize = 11.sp)
-                        }
-                        Icon(Icons.Default.Download, contentDescription = "Open app", tint = Emerald)
+        items(allCategories.chunked(2)) { pair ->
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                pair.forEach { category ->
+                    Box(Modifier.weight(1f)) {
+                        CategoryTile(category, selectedCategory == category) { onCategory(category) }
                     }
                 }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
             }
         }
+        item {
+            Text(
+                if (selectedCategory == "All") "Search Results" else "$selectedCategory",
+                color = Gold, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 18.dp, top = 20.dp, bottom = 8.dp)
+            )
+            if (loading) {
+                Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Emerald)
+                }
+            } else if (error != null) {
+                Text(error, color = Muted, modifier = Modifier.padding(18.dp))
+            } else if (shown.isEmpty()) {
+                Text("No apps found in this category.", color = Muted, modifier = Modifier.padding(18.dp))
+            }
+        }
+        items(shown, key = { "search-${it.id}" }) { app ->
+            AppRow(app, onSelect)
+        }
+    }
+}
+
+@Composable
+private fun CategoryTile(name: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        color = if (selected) Emerald.copy(alpha = 0.20f) else DeepGreen,
+        shape = RoundedCornerShape(13.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp, if (selected) Emerald else Color(0xFF234334)
+        )
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 15.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(name, color = if (selected) Gold else Color.White, fontSize = 13.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                maxLines = 2, modifier = Modifier.weight(1f))
+            Text("›", color = Emerald, fontSize = 20.sp)
+        }
+    }
+}
+
+@Composable
+private fun CategoryPill(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        color = if (selected) Emerald else DeepGreen,
+        shape = CircleShape,
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Text(label, color = if (selected) DeepBlack else Color.White,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun StoreContent(
+    apps: List<StoreApp>, loading: Boolean, error: String?,
+    onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit
+) {
+    when {
+        loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Emerald)
+        }
+        error != null -> Column(
+            Modifier.fillMaxWidth().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("Store could not load", color = Color.White, fontWeight = FontWeight.Bold)
+            Text(error, color = Muted, modifier = Modifier.padding(vertical = 10.dp))
+            Button(onClick = onRefresh, colors = ButtonDefaults.buttonColors(containerColor = Emerald)) {
+                Text("Retry", color = DeepBlack)
+            }
+        }
+        apps.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No published apps found.", color = Muted)
+        }
+        else -> LazyColumn(
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(apps, key = { it.id }) { app -> AppRow(app, onSelect) }
+        }
+    }
+}
+
+@Composable
+private fun AppRow(app: StoreApp, onSelect: (StoreApp) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(DeepGreen)
+            .clickable { onSelect(app) }.padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (app.iconUrl != null) {
+            AsyncImage(app.iconUrl, contentDescription = app.name,
+                modifier = Modifier.size(64.dp).clip(RoundedCornerShape(15.dp)),
+                contentScale = ContentScale.Crop)
+        } else {
+            Box(Modifier.size(64.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xFF173B2B)),
+                contentAlignment = Alignment.Center) {
+                Text("MS", color = Gold, fontWeight = FontWeight.ExtraBold)
+            }
+        }
+        Column(Modifier.weight(1f).padding(start = 13.dp)) {
+            Text(app.name, color = Color.White, fontWeight = FontWeight.Bold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(app.developerName, color = Muted, fontSize = 12.sp)
+            Text("${app.category} · v${app.version}", color = Gold, fontSize = 11.sp)
+        }
+        Icon(Icons.Default.Download, contentDescription = "Open app", tint = Emerald)
+    }
+}
+
+@Composable
+private fun ProfilePage() {
+    Column(
+        Modifier.fillMaxSize().weight(1f).padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(Modifier.height(28.dp))
+        Box(Modifier.size(82.dp).clip(CircleShape).background(DeepGreen),
+            contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.Person, contentDescription = null, tint = Gold, modifier = Modifier.size(42.dp))
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("Your Profile", color = Gold, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+        Text("Sign-in and account profile will be added in the profile update.", color = Muted,
+            modifier = Modifier.padding(top = 8.dp))
+    }
+}
+
+@Composable
+private fun BottomNavigation(selected: String, onTab: (String) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(DeepGreen).padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        NavItem("Games", selected == "Games", { Icon(Icons.Default.SportsEsports, null) }) { onTab("Games") }
+        NavItem("Apps", selected == "Apps", { Icon(Icons.Default.Apps, null) }) { onTab("Apps") }
+        NavItem("Search", selected == "Search", { Icon(Icons.Default.Search, null) }) { onTab("Search") }
+        NavItem("You", selected == "You", { Icon(Icons.Default.Person, null) }) { onTab("You") }
+    }
+}
+
+@Composable
+private fun NavItem(label: String, selected: Boolean, icon: @Composable () -> Unit, onClick: () -> Unit) {
+    Column(
+        Modifier.clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick)
+            .background(if (selected) Emerald.copy(alpha = 0.16f) else Color.Transparent)
+            .padding(horizontal = 16.dp, vertical = 7.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        CompositionLocalProvider(LocalContentColor provides if (selected) Gold else Muted) { icon() }
+        Text(label, color = if (selected) Gold else Muted, fontSize = 11.sp)
     }
 }
 
@@ -248,14 +454,18 @@ private fun StoreHome(
 private fun AppDetails(app: StoreApp, progress: Int?, onBack: () -> Unit, onInstall: () -> Unit) {
     Column(Modifier.fillMaxSize().background(DeepBlack)) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) }
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+            }
             Text("App details", color = Gold, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         }
         Column(Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (app.iconUrl != null) AsyncImage(app.iconUrl, contentDescription = app.name,
-                    modifier = Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)), contentScale = ContentScale.Crop)
-                else Box(Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)).background(DeepGreen), contentAlignment = Alignment.Center) {
+                    modifier = Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)),
+                    contentScale = ContentScale.Crop)
+                else Box(Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)).background(DeepGreen),
+                    contentAlignment = Alignment.Center) {
                     Text("MS", color = Gold, fontWeight = FontWeight.ExtraBold)
                 }
                 Column(Modifier.weight(1f).padding(start = 16.dp)) {
@@ -269,20 +479,23 @@ private fun AppDetails(app: StoreApp, progress: Int?, onBack: () -> Unit, onInst
                 Button(onClick = onInstall, modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = Emerald)) {
                     Icon(Icons.Default.Download, contentDescription = null, tint = DeepBlack)
-                    Text("Install", color = DeepBlack, modifier = Modifier.padding(start = 8.dp), fontWeight = FontWeight.Bold)
+                    Text("Install", color = DeepBlack, modifier = Modifier.padding(start = 8.dp),
+                        fontWeight = FontWeight.Bold)
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(progress = { progress / 100f }, modifier = Modifier.size(54.dp),
-                            color = DownloadBlue, trackColor = DeepGreen, strokeWidth = 5.dp)
+                        CircularProgressIndicator(progress = { progress / 100f },
+                            modifier = Modifier.size(54.dp), color = DownloadBlue,
+                            trackColor = DeepGreen, strokeWidth = 5.dp)
                         Text("$progress%", color = Color.White, fontSize = 11.sp)
                     }
-                    Text("Downloading… $progress%", color = DownloadBlue, modifier = Modifier.padding(start = 14.dp))
+                    Text("Downloading… $progress%", color = DownloadBlue,
+                        modifier = Modifier.padding(start = 14.dp))
                 }
             }
             Spacer(Modifier.height(24.dp))
-            Divider(color = DeepGreen)
+            HorizontalDivider(color = DeepGreen)
             Text("About this app", color = Gold, fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 18.dp, bottom = 8.dp))
             Text(app.description.ifBlank { "No description available." }, color = Muted, lineHeight = 21.sp)
