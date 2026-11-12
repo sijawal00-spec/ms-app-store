@@ -446,7 +446,7 @@ async function submitScannedApp(e){
   const shotPaths=await uploadScreenshotFiles(shots,appId,'userScreenshotStatus');
   let iconPath=scannedMeta?.icon_path||null;
   if(icon&&icon.size){
-   iconPath=await uploadAppIcon(icon,'userIconStatus');
+   iconPath=await uploadAppIcon(icon,'userScreenshotStatus');
   }
   const row={id:appId,user_id:currentUser.id,name:f.get('name').trim(),developer_name:f.get('developer_name').trim(),app_type:f.get('app_type'),category:f.get('category'),version:f.get('version').trim(),package_name:f.get('package_name').trim(),description:f.get('description').trim(),icon_path:iconPath,apk_path:pendingApkPath,apk_size_bytes:pendingApk?.size||(await readDraft('user'))?.apkSize||0,status:'pending'};
   const ins=await sb.from('apps').insert(row);
@@ -529,7 +529,7 @@ async function submitAdminScannedApp(e){
   uploadedShotPaths=await uploadScreenshotFiles(shots,appId,'adminScreenshotStatus');
   let iconPath=null;
   if(icon&&icon.size){
-   iconPath=await uploadAppIcon(icon,'adminIconStatus');uploadedIconPath=iconPath;
+   iconPath=await uploadAppIcon(icon,'adminScreenshotStatus');uploadedIconPath=iconPath;
   }
   const row={id:appId,user_id:currentUser.id,name:f.get('name').trim(),developer_name:f.get('developer_name').trim(),app_type:f.get('app_type'),category:f.get('category'),version:f.get('version').trim(),package_name:f.get('package_name').trim(),description:f.get('description').trim(),icon_path:iconPath,apk_path:pendingAdminApkPath,apk_size_bytes:pendingAdminApkSize||pendingAdminApk?.size||(await readDraft('admin'))?.apkSize||0,status:'approved',reviewed_by:currentUser.id,reviewed_at:new Date().toISOString()};
   const ins=await sb.from('apps').insert(row);
