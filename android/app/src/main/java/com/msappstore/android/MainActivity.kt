@@ -245,71 +245,102 @@ private fun SearchPage(
     selectedCategory: String, onCategory: (String) -> Unit,
     onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit
 ) {
-    val shown = apps.filter { app ->
-        (selectedCategory == "All" || app.category.equals(selectedCategory, true)) &&
-            (search.isBlank() || listOf(app.name, app.developerName, app.category, app.description)
-                .any { it.contains(search, true) })
-    }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 12.dp)
-    ) {
-        item {
+    if (selectedCategory != "All") {
+        val categoryApps = apps.filter { it.category.equals(selectedCategory, true) }
+        Column(Modifier.fillMaxSize().background(DeepBlack)) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Search", color = Gold, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-                Spacer(Modifier.weight(1f))
+                IconButton(onClick = { onCategory("All") }) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back to all categories", tint = Gold)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(selectedCategory, color = Gold, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("${categoryApps.size} apps and games", color = Muted, fontSize = 12.sp)
+                }
                 IconButton(onClick = onRefresh) {
-                    Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = Gold)
+                    Icon(Icons.Default.Notifications, contentDescription = "Refresh", tint = Gold)
                 }
             }
-            OutlinedTextField(
-                value = search, onValueChange = onSearch,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                placeholder = { Text("Search apps & games") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                singleLine = true, shape = RoundedCornerShape(24.dp)
-            )
-            Text(
-                "All Categories", color = Color.White, fontSize = 18.sp,
-                fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 18.dp, top = 22.dp, bottom = 10.dp)
-            )
-            CategoryPill("All", selectedCategory == "All") { onCategory("All") }
-            Spacer(Modifier.height(8.dp))
-        }
-        items(allCategories.chunked(2)) { pair ->
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                pair.forEach { category ->
-                    Box(Modifier.weight(1f)) {
-                        CategoryTile(category, selectedCategory == category) { onCategory(category) }
-                    }
-                }
-                if (pair.size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
-        item {
-            Text(
-                if (selectedCategory == "All") "Search Results" else "$selectedCategory",
-                color = Gold, fontSize = 17.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 18.dp, top = 20.dp, bottom = 8.dp)
-            )
-            if (loading) {
-                Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+            when {
+                loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = Emerald)
                 }
-            } else if (error != null) {
-                Text(error, color = Muted, modifier = Modifier.padding(18.dp))
-            } else if (shown.isEmpty()) {
-                Text("No apps found in this category.", color = Muted, modifier = Modifier.padding(18.dp))
+                error != null -> Text(error, color = Muted, modifier = Modifier.padding(18.dp))
+                categoryApps.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No apps available in $selectedCategory yet.", color = Muted)
+                }
+                else -> LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(categoryApps, key = { "category-${it.id}" }) { app -> AppRow(app, onSelect) }
+                }
             }
         }
-        items(shown, key = { "search-${it.id}" }) { app ->
-            AppRow(app, onSelect)
+    } else {
+        val matchingApps = apps.filter { app ->
+            search.isBlank() || listOf(app.name, app.developerName, app.category, app.description)
+                .any { it.contains(search, true) }
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 12.dp)
+        ) {
+            item {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Search", color = Gold, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                    Spacer(Modifier.weight(1f))
+                    IconButton(onClick = onRefresh) {
+                        Icon(Icons.Default.Notifications, contentDescription = "Refresh", tint = Gold)
+                    }
+                }
+                OutlinedTextField(
+                    value = search, onValueChange = onSearch,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    placeholder = { Text("Search apps & games") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    singleLine = true, shape = RoundedCornerShape(24.dp)
+                )
+                Text(
+                    "All Categories", color = Color.White, fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 18.dp, top = 22.dp, bottom = 10.dp)
+                )
+                CategoryPill("All", true) { onCategory("All") }
+                Spacer(Modifier.height(8.dp))
+            }
+            items(allCategories.chunked(2)) { pair ->
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    pair.forEach { category ->
+                        Box(Modifier.weight(1f)) {
+                            CategoryTile(category, false) { onCategory(category) }
+                        }
+                    }
+                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+            item {
+                Text("Search Results", color = Gold, fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 18.dp, top = 20.dp, bottom = 8.dp))
+                if (loading) {
+                    Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Emerald)
+                    }
+                } else if (error != null) {
+                    Text(error, color = Muted, modifier = Modifier.padding(18.dp))
+                } else if (matchingApps.isEmpty()) {
+                    Text("No apps found.", color = Muted, modifier = Modifier.padding(18.dp))
+                }
+            }
+            items(matchingApps, key = { "search-${it.id}" }) { app -> AppRow(app, onSelect) }
         }
     }
 }
