@@ -700,8 +700,95 @@ private fun ScreenshotViewer(imageUrl: String, onClose: () -> Unit) {
 @Composable
 private fun AppDetails(
     app: StoreApp, progress: Int?, onBack: () -> Unit,
-    onInstall: () -> Unit, onScreenshot: (String) -> Unit
+    onInstall: () -> Unit, onScreenshot: (String) -> Unit,
+    account: AccountState, repository: StoreRepository
 ) {
+    var expandedDescription by remember(app.id) { mutableStateOf(false) }
+    var reviewComposerOpen by remember(app.id) { mutableStateOf(false) }
+    var selectedRating by remember(app.id) { mutableIntStateOf(5) }
+    var reviewText by remember(app.id) { mutableStateOf("") }
+    var reviews by remember(app.id) { mutableStateOf<List<AppReview>>(emptyList()) }
+    var downloadCount by remember(app.id) { mutableIntStateOf(0) }
+    var reviewLoading by remember(app.id) { mutableStateOf(true) }
+    var reviewError by remember(app.id) { mutableStateOf<String?>(null) }
+    var posting by remember(app.id) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(app.id) {
+        reviewLoading = true
+        try {
+            reviews = repository.loadAppReviews(app.id)
+            downloadCount = repository.loadDownloadCount(app.id)
+            reviewError = null
+        } catch (e: Exception) {
+            reviewError = e.message ?: "Could not load reviews."
+        } finally { reviewLoading = false }
+    }
+
+    if (reviewComposerOpen) {
+        Column(Modifier.fillMaxSize().background(DeepBlack)) {
+            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { reviewComposerOpen = false }) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+                }
+                Text("Write a review", color = Gold, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Spacer(Modifier.weight(1f))
+                IconButton(
+                    enabled = account.signedIn && reviewText.isNotBlank() && !posting,
+                    onClick = {
+                        posting = true
+                        scope.launch {
+                            try {
+                                repository.submitAppReview(
+                                    app.id, account.accessToken, account.userId,
+                                    account.displayName.ifBlank { account.email.substringBefore("@") },
+                                    account.avatarUri, selectedRating, reviewText
+                                )
+                                reviews = repository.loadAppReviews(app.id)
+                                reviewText = ""
+                                reviewComposerOpen = false
+                                reviewError = null
+                            } catch (e: Exception) {
+                                reviewError = e.message ?: "Review could not be posted."
+                            } finally { posting = false }
+                        }
+                    }
+                ) {
+                    if (posting) CircularProgressIndicator(color = Emerald, modifier = Modifier.size(24.dp))
+                    else Icon(Icons.Default.Send, contentDescription = "Post review", tint = Emerald, modifier = Modifier.size(28.dp))
+                }
+            }
+            Column(Modifier.fillMaxSize().padding(20.dp)) {
+                Text(app.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                Text("Rate this app", color = Muted, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    (1..5).forEach { star ->
+                        IconButton(onClick = { selectedRating = star }) {
+                            Icon(
+                                if (star <= selectedRating) Icons.Default.Star else Icons.Default.StarBorder,
+                                contentDescription = "$star stars", tint = Gold,
+                                modifier = Modifier.size(34.dp)
+                            )
+                        }
+                    }
+                }
+                Text("$selectedRating out of 5", color = Gold, fontWeight = FontWeight.SemiBold)
+                OutlinedTextField(
+                    value = reviewText, onValueChange = { reviewText = it },
+                    modifier = Modifier.fillMaxWidth().padding(top = 18.dp),
+                    placeholder = { Text("Write your comment…") },
+                    minLines = 5, maxLines = 8
+                )
+                if (!account.signedIn) {
+                    Text("Please sign in from the Profile tab before posting.", color = Muted,
+                        modifier = Modifier.padding(top = 12.dp))
+                }
+                reviewError?.let { Text(it, color = Color(0xFFFF8A80), modifier = Modifier.padding(top = 10.dp)) }
+            }
+        }
+        return
+    }
+
     Column(Modifier.fillMaxSize().background(DeepBlack)) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
@@ -709,14 +796,14 @@ private fun AppDetails(
             }
             Text("App details", color = Gold, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         }
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (!app.iconUrl.isNullOrBlank()) AsyncImage(model = app.iconUrl, contentDescription = app.name,
-                    modifier = Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)),
-                    contentScale = ContentScale.Crop)
-                else Box(Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)).background(DeepGreen),
-                    contentAlignment = Alignment.Center) {
-                    Text("MS", color = Gold, fontWeight = FontWeight.ExtraBold)
+                if (!app.iconUrl.isNullOrBlank()) {
+                    AsyncImage(model = app.iconUrl, contentDescription = app.name,
+                        modifier = Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)), contentScale = ContentScale.Crop)
+                } else {
+                    Box(Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)).background(DeepGreen),
+                        contentAlignment = Alignment.Center) { Text("MS", color = Gold, fontWeight = FontWeight.ExtraBold) }
                 }
                 Column(Modifier.weight(1f).padding(start = 16.dp)) {
                     Text(app.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
@@ -724,47 +811,112 @@ private fun AppDetails(
                     Text("v${app.version} · ${app.category}", color = Gold, fontSize = 12.sp)
                 }
             }
-            if (app.screenshotUrls.isNotEmpty()) {
-                Spacer(Modifier.height(20.dp))
-                Text("Screenshots", color = Gold, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(10.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(app.screenshotUrls) { screenshot ->
-                        AsyncImage(model = screenshot, contentDescription = "${app.name} screenshot",
-                            modifier = Modifier.width(240.dp).height(144.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .clickable { onScreenshot(screenshot) },
-                            contentScale = ContentScale.Crop)
-                    }
-                }
-            }
-            Spacer(Modifier.height(24.dp))
+
+            Spacer(Modifier.height(18.dp))
             if (progress == null || progress >= 100) {
                 Button(onClick = onInstall, modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = Emerald)) {
                     Icon(Icons.Default.Download, contentDescription = null, tint = DeepBlack)
-                    Text("Install", color = DeepBlack, modifier = Modifier.padding(start = 8.dp),
-                        fontWeight = FontWeight.Bold)
+                    Text("Install", color = DeepBlack, modifier = Modifier.padding(start = 8.dp), fontWeight = FontWeight.Bold)
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(progress = { progress / 100f },
-                            modifier = Modifier.size(54.dp), color = DownloadBlue,
-                            trackColor = DeepGreen, strokeWidth = 5.dp)
-                        Text("$progress%", color = Color.White, fontSize = 11.sp)
-                    }
-                    Text("Downloading… $progress%", color = DownloadBlue,
-                        modifier = Modifier.padding(start = 14.dp))
+                    CircularProgressIndicator(progress = { progress / 100f }, modifier = Modifier.size(48.dp),
+                        color = DownloadBlue, trackColor = DeepGreen, strokeWidth = 5.dp)
+                    Text("Downloading… $progress%", color = DownloadBlue, modifier = Modifier.padding(start = 14.dp))
                 }
             }
-            Spacer(Modifier.height(24.dp))
-            HorizontalDivider(color = DeepGreen)
-            Text("About this app", color = Gold, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 18.dp, bottom = 8.dp))
-            Text(app.description.ifBlank { "No description available." }, color = Muted, lineHeight = 21.sp)
+
+            val averageRating = if (reviews.isEmpty()) 0.0 else reviews.map { it.rating }.average()
+            val sizeLabel = if (app.apkSizeBytes > 0) String.format(java.util.Locale.US, "%.1f MB", app.apkSizeBytes / 1048576.0) else "Size unavailable"
             Spacer(Modifier.height(16.dp))
-            Text("Package: ${app.packageName.ifBlank { "Not provided" }}", color = Muted, fontSize = 12.sp)
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(DeepGreen).padding(vertical = 14.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(if (reviews.isEmpty()) "—" else String.format(java.util.Locale.US, "%.1f ★", averageRating), color = Gold, fontWeight = FontWeight.Bold)
+                    Text("${reviews.size} ratings", color = Muted, fontSize = 11.sp)
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(downloadCount.toString(), color = Gold, fontWeight = FontWeight.Bold)
+                    Text("Downloads", color = Muted, fontSize = 11.sp)
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(sizeLabel, color = Gold, fontWeight = FontWeight.Bold)
+                    Text("App size", color = Muted, fontSize = 11.sp)
+                }
+            }
+
+            if (app.screenshotUrls.isNotEmpty()) {
+                Spacer(Modifier.height(22.dp))
+                Text("Screenshots", color = Gold, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Spacer(Modifier.height(10.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(app.screenshotUrls) { screenshot ->
+                        AsyncImage(model = screenshot, contentDescription = "${app.name} screenshot",
+                            modifier = Modifier.width(240.dp).height(144.dp).clip(RoundedCornerShape(14.dp))
+                                .clickable { onScreenshot(screenshot) }, contentScale = ContentScale.Crop)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(22.dp))
+            HorizontalDivider(color = DeepGreen)
+            Text("About this app", color = Gold, fontWeight = FontWeight.Bold, fontSize = 17.sp,
+                modifier = Modifier.padding(top = 18.dp, bottom = 8.dp))
+            Text(
+                if (expandedDescription || app.description.length <= 180) app.description.ifBlank { "No description available." }
+                else app.description.take(180).trimEnd() + "…",
+                color = Muted, lineHeight = 21.sp
+            )
+            if (app.description.length > 180) {
+                TextButton(onClick = { expandedDescription = !expandedDescription }) {
+                    Text(if (expandedDescription) "Less" else "More", color = Emerald)
+                }
+            }
+            Text("Package: ${app.packageName.ifBlank { "Not provided" }}", color = Muted, fontSize = 12.sp,
+                modifier = Modifier.padding(top = 8.dp))
+
+            Spacer(Modifier.height(22.dp))
+            HorizontalDivider(color = DeepGreen)
+            Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Ratings & reviews", color = Gold, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text(if (reviews.isEmpty()) "Be the first to review this app" else "${reviews.size} reviews", color = Muted, fontSize = 12.sp)
+                }
+                TextButton(onClick = { reviewComposerOpen = true }) { Text("Write a review", color = Emerald) }
+            }
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(DeepGreen)
+                .clickable { reviewComposerOpen = true }.padding(14.dp)) {
+                Text("☆ ☆ ☆ ☆ ☆", color = Gold, fontSize = 19.sp)
+                Text("Write a public review", color = Muted, fontSize = 13.sp)
+            }
+            if (reviewLoading) {
+                Box(Modifier.fillMaxWidth().padding(18.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Emerald, modifier = Modifier.size(24.dp))
+                }
+            } else if (reviews.isEmpty()) {
+                Text("No comments yet.", color = Muted, modifier = Modifier.padding(vertical = 14.dp))
+            } else {
+                reviews.forEach { review ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.Top) {
+                        if (review.avatarUrl.isNotBlank()) {
+                            AsyncImage(model = review.avatarUrl, contentDescription = review.userName,
+                                modifier = Modifier.size(40.dp).clip(CircleShape), contentScale = ContentScale.Crop)
+                        } else {
+                            Box(Modifier.size(40.dp).clip(CircleShape).background(DeepGreen), contentAlignment = Alignment.Center) {
+                                Text(review.userName.take(1).uppercase(), color = Gold, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                            Text(review.userName, color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text("★".repeat(review.rating) + "☆".repeat(5 - review.rating), color = Gold, fontSize = 13.sp)
+                            Text(review.comment, color = Muted, lineHeight = 20.sp, modifier = Modifier.padding(top = 4.dp))
+                        }
+                    }
+                    HorizontalDivider(color = DeepGreen)
+                }
+            }
+            reviewError?.let { Text(it, color = Color(0xFFFF8A80), modifier = Modifier.padding(vertical = 8.dp)) }
         }
     }
 }
