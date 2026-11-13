@@ -218,7 +218,7 @@ class MainActivity : ComponentActivity() {
                             withContext(Dispatchers.Main) { downloadProgress = downloadProgress + (app.id to percent) }
                         }
                         if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                            if (signedInAccount.signedIn && signedInAccount.userId.isNotBlank()) { try { repository.recordDownload(app.id, signedInAccount.accessToken, signedInAccount.userId) } catch (_: Exception) { } }
+                            try { repository.recordDownload(app.id, signedInAccount.accessToken, signedInAccount.userId) } catch (_: Exception) { }
                             finished = true
                             val uri = manager.getUriForDownloadedFile(id)
                             withContext(Dispatchers.Main) {

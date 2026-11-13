@@ -164,11 +164,14 @@ class StoreRepository {
         }
     }
 
-    suspend fun recordDownload(appId: String, accessToken: String, userId: String) = withContext(Dispatchers.IO) {
-        val payload = JSONObject().put("app_id", appId).put("user_id", userId)
-        val request = Request.Builder().url("$BASE_URL/rest/v1/app_downloads")
-            .header("apikey", PUBLISHABLE_KEY).header("Authorization", "Bearer $accessToken")
-            .header("Content-Type", "application/json").post(payload.toString().toRequestBody("application/json".toMediaType())).build()
+    suspend fun recordDownload(appId: String, accessToken: String = "", userId: String = "") = withContext(Dispatchers.IO) {
+        val payload = JSONObject().put("app_id", appId)
+        if (userId.isBlank()) payload.put("user_id", JSONObject.NULL) else payload.put("user_id", userId)
+        val builder = Request.Builder().url("$BASE_URL/rest/v1/app_downloads")
+            .header("apikey", PUBLISHABLE_KEY).header("Content-Type", "application/json")
+        if (accessToken.isNotBlank()) builder.header("Authorization", "Bearer $accessToken")
+        else builder.header("Authorization", "Bearer $PUBLISHABLE_KEY")
+        val request = builder.post(payload.toString().toRequestBody("application/json".toMediaType())).build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IOException("Download count update failed (${response.code}).")
         }
