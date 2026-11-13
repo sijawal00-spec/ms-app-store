@@ -22,7 +22,7 @@ data class AccountState(
     val signedIn: Boolean get() = accessToken.isNotBlank()
 }
 
-class AuthRepository(context: Context) {
+class AuthRepository(private val context: Context) {
     private val prefs = context.getSharedPreferences("ms_account", Context.MODE_PRIVATE)
     private val client = OkHttpClient()
     private val base = "https://opnubbmamtybumihkdpa.supabase.co"
