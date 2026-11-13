@@ -7,6 +7,8 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.IOException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class AccountState(
     val accessToken: String = "",
@@ -47,7 +49,7 @@ class AuthRepository(context: Context) {
         val request = Request.Builder().url(endpoint)
             .header("apikey", key).header("Content-Type", "application/json")
             .post(payload.toString().toRequestBody("application/json".toMediaType())).build()
-        return client.newCall(request).execute().use { response ->
+        return withContext(Dispatchers.IO) { client.newCall(request).execute().use { response ->
             val body = JSONObject(response.body?.string().orEmpty().ifBlank { "{}" })
             if (!response.isSuccessful) {
                 val message = body.optString("msg").ifBlank {
@@ -71,6 +73,6 @@ class AuthRepository(context: Context) {
             prefs.edit().putString("access_token", state.accessToken)
                 .putString("email", state.email).putString("display_name", state.displayName).apply()
             state
-        }
+        } }
     }
 }
