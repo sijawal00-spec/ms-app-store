@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -83,6 +84,7 @@ class MainActivity : ComponentActivity() {
     private var error by mutableStateOf<String?>(null)
     private var selectedApp by mutableStateOf<StoreApp?>(null)
     private var selectedScreenshotUrl by mutableStateOf<String?>(null)
+    private var selectedUtilityPage by mutableStateOf<String?>(null)
     private var search by mutableStateOf("")
     private var selectedTab by mutableStateOf("Apps")
     private var selectedCategory by mutableStateOf("All")
@@ -105,6 +107,18 @@ class MainActivity : ComponentActivity() {
                             imageUrl = selectedScreenshotUrl!!,
                             onClose = { selectedScreenshotUrl = null }
                         )
+                        selectedUtilityPage != null -> UtilityPage(
+                            page = selectedUtilityPage!!,
+                            versionName = BuildConfig.VERSION_NAME,
+                            versionCode = BuildConfig.VERSION_CODE,
+                            account = account,
+                            onBack = { selectedUtilityPage = null },
+                            onNavigate = { selectedUtilityPage = it },
+                            onOpenProfile = { selectedUtilityPage = null; selectedTab = "You" },
+                            onOpenDeveloper = {
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://sijawal00-spec.github.io/ms-app-store/")))
+                            }
+                        )
                         selectedApp == null -> StoreShell(
                             apps = apps, loading = loading, error = error,
                             search = search, onSearch = { search = it },
@@ -120,7 +134,9 @@ class MainActivity : ComponentActivity() {
                             account = account,
                             onAuthenticate = { email, password, name, signup -> lifecycleScope.launch { try { account = authRepository.authenticate(email, password, name, signup) } catch (e: Exception) { Toast.makeText(this@MainActivity, e.message ?: "Sign in failed", Toast.LENGTH_LONG).show() } } },
                             onSignOut = { account = authRepository.signOut() },
-                            onAvatar = { account = authRepository.saveAvatar(it) }
+                            onAvatar = { account = authRepository.saveAvatar(it) },
+                            onSettings = { selectedUtilityPage = "Settings" },
+                            onNotifications = { selectedUtilityPage = "Notifications" }
                         )
                         selectedApp != null -> {
                         AppDetails(
@@ -233,7 +249,8 @@ private fun StoreShell(
     onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit,
     onScreenshot: (String) -> Unit,
     account: AccountState, onAuthenticate: (String, String, String, Boolean) -> Unit,
-    onSignOut: () -> Unit, onAvatar: (String) -> Unit
+    onSignOut: () -> Unit, onAvatar: (String) -> Unit,
+    onSettings: () -> Unit, onNotifications: () -> Unit
 ) {
     Column(Modifier.fillMaxSize().background(DeepBlack)) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -244,7 +261,8 @@ private fun StoreShell(
             )
             "You" -> ProfilePage(account, onAuthenticate, onSignOut, onAvatar)
             else -> HomePage(
-                apps, loading, error, selectedTab, onRefresh, onSelect, onScreenshot, account
+                apps, loading, error, selectedTab, onRefresh, onSelect, onScreenshot, account,
+                onSettings, onNotifications
             )
         }
         }
@@ -256,9 +274,9 @@ private fun StoreShell(
 private fun HomePage(
     apps: List<StoreApp>, loading: Boolean, error: String?,
     tab: String, onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit,
-    onScreenshot: (String) -> Unit, account: AccountState
+    onScreenshot: (String) -> Unit, account: AccountState,
+    onSettings: () -> Unit, onNotifications: () -> Unit
 ) {
-    var showNotifications by remember { mutableStateOf(false) }
     val gamesOnly = tab == "Games"
     val shown = apps.filter { (it.appType.equals("game", true)) == gamesOnly }
     Column(Modifier.fillMaxSize()) {
@@ -275,8 +293,11 @@ private fun HomePage(
             } else {
                 Box(Modifier.size(42.dp).clip(CircleShape).background(DeepGreen), contentAlignment = Alignment.Center) { Icon(Icons.Default.Person, contentDescription = "Profile", tint = Gold) }
             }
-            IconButton(onClick = { showNotifications = true }) {
+            IconButton(onClick = onNotifications) {
                 Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = Gold)
+            }
+            IconButton(onClick = onSettings) {
+                Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Gold)
             }
         }
         Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -284,7 +305,6 @@ private fun HomePage(
             CategoryPill("Categories", false) { }
         }
         StoreContent(shown, loading, error, onRefresh, onSelect, onScreenshot)
-        if (showNotifications) AlertDialog(onDismissRequest = { showNotifications = false }, title = { Text("Notifications") }, text = { Text("You are all caught up. New store updates will appear here.") }, confirmButton = { TextButton(onClick = { showNotifications = false }) { Text("OK") } })
     }
 }
 
