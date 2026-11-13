@@ -71,7 +71,7 @@ class AuthRepository(private val context: Context) {
         val request = Request.Builder().url("$base/auth/v1/user")
             .header("apikey", key).header("Authorization", "Bearer ${current.accessToken}")
             .header("Content-Type", "application/json")
-            .patch(payload.toString().toRequestBody("application/json".toMediaType())).build()
+            .put(payload.toString().toRequestBody("application/json".toMediaType())).build()
         client.newCall(request).execute().use { response ->
             val body = JSONObject(response.body?.string().orEmpty().ifBlank { "{}" })
             if (!response.isSuccessful) throw IOException(body.optString("message").ifBlank { "Profile update failed (${response.code})." })
@@ -104,7 +104,7 @@ class AuthRepository(private val context: Context) {
         val update = Request.Builder().url("$base/auth/v1/user")
             .header("apikey", key).header("Authorization", "Bearer ${current.accessToken}")
             .header("Content-Type", "application/json")
-            .patch(payload.toString().toRequestBody("application/json".toMediaType())).build()
+            .put(payload.toString().toRequestBody("application/json".toMediaType())).build()
         client.newCall(update).execute().use { response ->
             val body = JSONObject(response.body?.string().orEmpty().ifBlank { "{}" })
             if (!response.isSuccessful) throw IOException(body.optString("message").ifBlank { "Profile photo save failed (${response.code})." })
