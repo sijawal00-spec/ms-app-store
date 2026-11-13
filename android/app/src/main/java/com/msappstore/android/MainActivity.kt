@@ -16,6 +16,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -433,28 +434,40 @@ private fun StoreContent(
 
 @Composable
 private fun AppRow(app: StoreApp, onSelect: (StoreApp) -> Unit) {
-    Row(
+    Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(DeepGreen)
-            .clickable { onSelect(app) }.padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable { onSelect(app) }.padding(14.dp)
     ) {
-        if (app.iconUrl != null) {
-            AsyncImage(app.iconUrl, contentDescription = app.name,
-                modifier = Modifier.size(64.dp).clip(RoundedCornerShape(15.dp)),
-                contentScale = ContentScale.Crop)
-        } else {
-            Box(Modifier.size(64.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xFF173B2B)),
-                contentAlignment = Alignment.Center) {
-                Text("MS", color = Gold, fontWeight = FontWeight.ExtraBold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (!app.iconUrl.isNullOrBlank()) {
+                AsyncImage(model = app.iconUrl, contentDescription = app.name,
+                    modifier = Modifier.size(64.dp).clip(RoundedCornerShape(15.dp)),
+                    contentScale = ContentScale.Crop)
+            } else {
+                Box(Modifier.size(64.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xFF173B2B)),
+                    contentAlignment = Alignment.Center) {
+                    Text("MS", color = Gold, fontWeight = FontWeight.ExtraBold)
+                }
+            }
+            Column(Modifier.weight(1f).padding(start = 13.dp)) {
+                Text(app.name, color = Color.White, fontWeight = FontWeight.Bold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(app.developerName, color = Muted, fontSize = 12.sp)
+                Text("${app.category} · v${app.version}", color = Gold, fontSize = 11.sp)
+            }
+            Icon(Icons.Default.Download, contentDescription = "Open app", tint = Emerald)
+        }
+        if (app.screenshotUrls.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(app.screenshotUrls) { screenshot ->
+                    AsyncImage(model = screenshot, contentDescription = "${app.name} screenshot",
+                        modifier = Modifier.width(174.dp).height(104.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop)
+                }
             }
         }
-        Column(Modifier.weight(1f).padding(start = 13.dp)) {
-            Text(app.name, color = Color.White, fontWeight = FontWeight.Bold,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(app.developerName, color = Muted, fontSize = 12.sp)
-            Text("${app.category} · v${app.version}", color = Gold, fontSize = 11.sp)
-        }
-        Icon(Icons.Default.Download, contentDescription = "Open app", tint = Emerald)
     }
 }
 
@@ -529,7 +542,7 @@ private fun AppDetails(app: StoreApp, progress: Int?, onBack: () -> Unit, onInst
         }
         Column(Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (app.iconUrl != null) AsyncImage(app.iconUrl, contentDescription = app.name,
+                if (!app.iconUrl.isNullOrBlank()) AsyncImage(model = app.iconUrl, contentDescription = app.name,
                     modifier = Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)),
                     contentScale = ContentScale.Crop)
                 else Box(Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)).background(DeepGreen),
@@ -540,6 +553,19 @@ private fun AppDetails(app: StoreApp, progress: Int?, onBack: () -> Unit, onInst
                     Text(app.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
                     Text(app.developerName, color = Muted)
                     Text("v${app.version} · ${app.category}", color = Gold, fontSize = 12.sp)
+                }
+            }
+            if (app.screenshotUrls.isNotEmpty()) {
+                Spacer(Modifier.height(20.dp))
+                Text("Screenshots", color = Gold, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(app.screenshotUrls) { screenshot ->
+                        AsyncImage(model = screenshot, contentDescription = "${app.name} screenshot",
+                            modifier = Modifier.width(240.dp).height(144.dp)
+                                .clip(RoundedCornerShape(14.dp)),
+                            contentScale = ContentScale.Crop)
+                    }
                 }
             }
             Spacer(Modifier.height(24.dp))

@@ -22,6 +22,7 @@ data class StoreApp(
     val description: String,
     val packageName: String,
     val iconUrl: String?,
+    val screenshotUrls: List<String>,
     val apkPath: String
 )
 
@@ -63,6 +64,7 @@ class StoreRepository {
                             description = item.optString("description", ""),
                             packageName = item.optString("package_name", ""),
                             iconUrl = iconPath?.let { signedAssetUrl("app-screenshots", it) },
+                            screenshotUrls = loadScreenshotUrls(item.optString("id")),
                             apkPath = item.optString("apk_path", "")
                         )
                     )
@@ -71,7 +73,31 @@ class StoreRepository {
         }
     }
 
+    private fun loadScreenshotUrls(appId: String): List<String> {
+        if (appId.isBlank()) return emptyList()
+        val request = requestBuilder(
+            "$BASE_URL/rest/v1/app_screenshots?select=storage_path&app_id=eq.${Uri.encode(appId)}&order=created_at.asc"
+        ).get().build()
+        return try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return emptyList()
+                val rows = JSONArray(response.body?.string().orEmpty())
+                buildList {
+                    for (i in 0 until rows.length()) {
+                        val path = rows.getJSONObject(i).optString("storage_path")
+                        if (path.isNotBlank() && path != "null") {
+                            signedAssetUrl("app-screenshots", path)?.let(::add)
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
     private fun signedAssetUrl(bucket: String, path: String): String? {
+        if (path.isBlank()) return null
         val encodedPath = path.split("/").joinToString("/") { Uri.encode(it) }
         val body = JSONObject().put("expiresIn", 3600).toString()
             .toRequestBody("application/json".toMediaType())
@@ -79,9 +105,12 @@ class StoreRepository {
             .post(body).build()
         return try {
             client.newCall(request).execute().use { response ->
+                val responseText = response.body?.string().orEmpty()
                 if (!response.isSuccessful) return null
-                val signed = JSONObject(response.body?.string().orEmpty()).optString("signedURL")
-                if (signed.isBlank()) null else if (signed.startsWith("http")) signed else "$BASE_URL$signed"
+                val signed = JSONObject(responseText).optString("signedURL")
+                if (signed.isBlank()) null
+                else if (signed.startsWith("http://") || signed.startsWith("https://")) signed
+                else BASE_URL + if (signed.startsWith("/")) signed else "/$signed"
             }
         } catch (_: Exception) {
             null
