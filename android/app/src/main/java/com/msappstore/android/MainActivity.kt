@@ -228,6 +228,7 @@ private fun HomePage(
     apps: List<StoreApp>, loading: Boolean, error: String?,
     tab: String, onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit, account: AccountState
 ) {
+    var showNotifications by remember { mutableStateOf(false) }
     val gamesOnly = tab == "Games"
     val shown = apps.filter { (it.appType.equals("game", true)) == gamesOnly }
     Column(Modifier.fillMaxSize()) {
@@ -239,7 +240,12 @@ private fun HomePage(
                 Text("MS App Store", color = Gold, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
                 Text(if (gamesOnly) "Discover games" else "Discover apps", color = Muted, fontSize = 12.sp)
             }
-            IconButton(onClick = onRefresh) {
+            if (account.avatarUri.isNotBlank()) {
+                AsyncImage(account.avatarUri, contentDescription = "Profile photo", modifier = Modifier.size(42.dp).clip(CircleShape), contentScale = ContentScale.Crop)
+            } else {
+                Box(Modifier.size(42.dp).clip(CircleShape).background(DeepGreen), contentAlignment = Alignment.Center) { Icon(Icons.Default.Person, contentDescription = "Profile", tint = Gold) }
+            }
+            IconButton(onClick = { showNotifications = true }) {
                 Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = Gold)
             }
         }
@@ -248,6 +254,7 @@ private fun HomePage(
             CategoryPill("Categories", false) { }
         }
         StoreContent(shown, loading, error, onRefresh, onSelect)
+        if (showNotifications) AlertDialog(onDismissRequest = { showNotifications = false }, title = { Text("Notifications") }, text = { Text("You are all caught up. New store updates will appear here.") }, confirmButton = { TextButton(onClick = { showNotifications = false }) { Text("OK") } })
     }
 }
 
@@ -458,7 +465,7 @@ private fun ProfilePage(account: AccountState, onAuthenticate: (String, String, 
     var password by remember { mutableStateOf("") }
     var name by remember { mutableStateOf(account.displayName) }
     val context = LocalContext.current
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             try { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
             onAvatar(uri.toString())
@@ -466,7 +473,7 @@ private fun ProfilePage(account: AccountState, onAuthenticate: (String, String, 
     }
     Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(Modifier.height(24.dp))
-        if (account.avatarUri.isNotBlank()) AsyncImage(account.avatarUri, contentDescription = "Profile photo", modifier = Modifier.size(92.dp).clip(CircleShape).clickable { picker.launch("image/*") }, contentScale = ContentScale.Crop)
+        if (account.avatarUri.isNotBlank()) AsyncImage(account.avatarUri, contentDescription = "Profile photo", modifier = Modifier.size(92.dp).clip(CircleShape).clickable { picker.launch(arrayOf("image/*")) }, contentScale = ContentScale.Crop)
         else Box(Modifier.size(92.dp).clip(CircleShape).background(DeepGreen).clickable { picker.launch("image/*") }, contentAlignment = Alignment.Center) { Icon(Icons.Default.Person, contentDescription = "Choose photo", tint = Gold, modifier = Modifier.size(48.dp)) }
         Text(if (account.signedIn) account.displayName.ifBlank { "Your Profile" } else "Your Profile", color = Gold, fontSize = 23.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
         if (account.signedIn) {
