@@ -474,11 +474,11 @@ private fun ProfilePage(account: AccountState, onAuthenticate: (String, String, 
     Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(Modifier.height(24.dp))
         if (account.avatarUri.isNotBlank()) AsyncImage(account.avatarUri, contentDescription = "Profile photo", modifier = Modifier.size(92.dp).clip(CircleShape).clickable { picker.launch(arrayOf("image/*")) }, contentScale = ContentScale.Crop)
-        else Box(Modifier.size(92.dp).clip(CircleShape).background(DeepGreen).clickable { picker.launch("image/*") }, contentAlignment = Alignment.Center) { Icon(Icons.Default.Person, contentDescription = "Choose photo", tint = Gold, modifier = Modifier.size(48.dp)) }
+        else Box(Modifier.size(92.dp).clip(CircleShape).background(DeepGreen).clickable { picker.launch(arrayOf("image/*")) }, contentAlignment = Alignment.Center) { Icon(Icons.Default.Person, contentDescription = "Choose photo", tint = Gold, modifier = Modifier.size(48.dp)) }
         Text(if (account.signedIn) account.displayName.ifBlank { "Your Profile" } else "Your Profile", color = Gold, fontSize = 23.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
         if (account.signedIn) {
             Text(account.email, color = Muted, modifier = Modifier.padding(8.dp))
-            OutlinedButton(onClick = { picker.launch("image/*") }) { Text("Change profile photo") }
+            OutlinedButton(onClick = { picker.launch(arrayOf("image/*")) }) { Text("Change profile photo") }
             Button(onClick = onSignOut, colors = ButtonDefaults.buttonColors(containerColor = Emerald)) { Text("Sign out", color = DeepBlack) }
         } else {
             Text(if (signup) "Create your account" else "Sign in to MS App Store", color = Muted, modifier = Modifier.padding(vertical = 12.dp))
