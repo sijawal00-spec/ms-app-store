@@ -136,7 +136,8 @@ class MainActivity : ComponentActivity() {
                             onSignOut = { account = authRepository.signOut() },
                             onAvatar = { account = authRepository.saveAvatar(it) },
                             onSettings = { selectedUtilityPage = "Settings" },
-                            onNotifications = { selectedUtilityPage = "Notifications" }
+                            onNotifications = { selectedUtilityPage = "Notifications" },
+                            onProfile = { selectedTab = "You" }
                         )
                         selectedApp != null -> {
                         AppDetails(
@@ -250,7 +251,7 @@ private fun StoreShell(
     onScreenshot: (String) -> Unit,
     account: AccountState, onAuthenticate: (String, String, String, Boolean) -> Unit,
     onSignOut: () -> Unit, onAvatar: (String) -> Unit,
-    onSettings: () -> Unit, onNotifications: () -> Unit
+    onSettings: () -> Unit, onNotifications: () -> Unit, onProfile: () -> Unit
 ) {
     Column(Modifier.fillMaxSize().background(DeepBlack)) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -262,7 +263,7 @@ private fun StoreShell(
             "You" -> ProfilePage(account, onAuthenticate, onSignOut, onAvatar)
             else -> HomePage(
                 apps, loading, error, selectedTab, onRefresh, onSelect, onScreenshot, account,
-                onSettings, onNotifications
+                onSettings, onNotifications, onProfile
             )
         }
         }
@@ -275,7 +276,7 @@ private fun HomePage(
     apps: List<StoreApp>, loading: Boolean, error: String?,
     tab: String, onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit,
     onScreenshot: (String) -> Unit, account: AccountState,
-    onSettings: () -> Unit, onNotifications: () -> Unit
+    onSettings: () -> Unit, onNotifications: () -> Unit, onProfile: () -> Unit
 ) {
     val gamesOnly = tab == "Games"
     val shown = apps.filter { (it.appType.equals("game", true)) == gamesOnly }
@@ -289,9 +290,9 @@ private fun HomePage(
                 Text(if (gamesOnly) "Discover games" else "Discover apps", color = Muted, fontSize = 12.sp)
             }
             if (account.avatarUri.isNotBlank()) {
-                AsyncImage(account.avatarUri, contentDescription = "Profile photo", modifier = Modifier.size(42.dp).clip(CircleShape), contentScale = ContentScale.Crop)
+                AsyncImage(account.avatarUri, contentDescription = "Profile photo", modifier = Modifier.size(42.dp).clip(CircleShape).clickable(onClick = onProfile), contentScale = ContentScale.Crop)
             } else {
-                Box(Modifier.size(42.dp).clip(CircleShape).background(DeepGreen), contentAlignment = Alignment.Center) { Icon(Icons.Default.Person, contentDescription = "Profile", tint = Gold) }
+                Box(Modifier.size(42.dp).clip(CircleShape).background(DeepGreen).clickable(onClick = onProfile), contentAlignment = Alignment.Center) { Icon(Icons.Default.Person, contentDescription = "Profile", tint = Gold) }
             }
             IconButton(onClick = onNotifications) {
                 Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = Gold)
