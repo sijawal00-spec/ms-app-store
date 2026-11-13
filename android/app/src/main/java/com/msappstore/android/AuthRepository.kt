@@ -1,6 +1,7 @@
 package com.msappstore.android
 
 import android.content.Context
+import android.util.Base64
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -26,13 +27,21 @@ class AuthRepository(context: Context) {
     private val base = "https://opnubbmamtybumihkdpa.supabase.co"
     private val key = "sb_publishable_98EvT0vNnoYEu9DCUcqjzA_kKxLjwRk"
 
-    fun load(): AccountState = AccountState(
-        accessToken = prefs.getString("access_token", "").orEmpty(),
-        email = prefs.getString("email", "").orEmpty(),
-        displayName = prefs.getString("display_name", "").orEmpty(),
-        avatarUri = prefs.getString("avatar_uri", "").orEmpty(),
-        userId = prefs.getString("user_id", "").orEmpty()
-    )
+    fun load(): AccountState {
+        val token = prefs.getString("access_token", "").orEmpty()
+        val savedId = prefs.getString("user_id", "").orEmpty()
+        val tokenId = if (savedId.isBlank()) try {
+            val payload = token.split(".").getOrNull(1).orEmpty()
+            JSONObject(String(Base64.decode(payload, Base64.URL_SAFE or Base64.NO_WRAP), Charsets.UTF_8)).optString("sub")
+        } catch (_: Exception) { "" } else ""
+        return AccountState(
+            accessToken = token,
+            email = prefs.getString("email", "").orEmpty(),
+            displayName = prefs.getString("display_name", "").orEmpty(),
+            avatarUri = prefs.getString("avatar_uri", "").orEmpty(),
+            userId = savedId.ifBlank { tokenId }
+        )
+    }
 
     fun saveAvatar(uri: String): AccountState {
         prefs.edit().putString("avatar_uri", uri).apply()
