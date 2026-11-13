@@ -44,6 +44,24 @@ class AuthRepository(context: Context) {
         )
     }
 
+    suspend fun refreshProfile(): AccountState = withContext(Dispatchers.IO) {
+        val current = load()
+        if (!current.signedIn) return@withContext current
+        val request = Request.Builder().url("$base/auth/v1/user")
+            .header("apikey", key).header("Authorization", "Bearer ${current.accessToken}").get().build()
+        client.newCall(request).execute().use { response ->
+            val body = JSONObject(response.body?.string().orEmpty().ifBlank { "{}" })
+            if (!response.isSuccessful) throw IOException("Profile sync failed (${response.code}).")
+            val metadata = body.optJSONObject("user_metadata") ?: JSONObject()
+            val updated = current.copy(email = body.optString("email", current.email),
+                displayName = metadata.optString("full_name", current.displayName),
+                avatarUri = metadata.optString("avatar_url", current.avatarUri),
+                userId = body.optString("id", current.userId))
+            prefs.edit().putString("email", updated.email).putString("display_name", updated.displayName)
+                .putString("avatar_uri", updated.avatarUri).putString("user_id", updated.userId).apply()
+            updated
+        }
+    }
     suspend fun updateDisplayName(name: String): AccountState = withContext(Dispatchers.IO) {
         val current = load()
         if (!current.signedIn) throw IOException("Pehle sign in karein.")
