@@ -1,6 +1,7 @@
 package com.msappstore.android
 
 import android.content.Context
+import android.net.Uri
 import android.util.Base64
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -43,9 +44,58 @@ class AuthRepository(context: Context) {
         )
     }
 
-    fun saveAvatar(uri: String): AccountState {
-        prefs.edit().putString("avatar_uri", uri).apply()
-        return load()
+    suspend fun updateDisplayName(name: String): AccountState = withContext(Dispatchers.IO) {
+        val current = load()
+        if (!current.signedIn) throw IOException("Pehle sign in karein.")
+        val cleanName = name.trim()
+        if (cleanName.length < 2) throw IOException("Name kam az kam 2 characters ka hona chahiye.")
+        val payload = JSONObject().put("data", JSONObject().put("full_name", cleanName))
+        val request = Request.Builder().url("$base/auth/v1/user")
+            .header("apikey", key).header("Authorization", "Bearer ${current.accessToken}")
+            .header("Content-Type", "application/json")
+            .patch(payload.toString().toRequestBody("application/json".toMediaType())).build()
+        client.newCall(request).execute().use { response ->
+            val body = JSONObject(response.body?.string().orEmpty().ifBlank { "{}" })
+            if (!response.isSuccessful) throw IOException(body.optString("message").ifBlank { "Profile update failed (${response.code})." })
+            val metadata = body.optJSONObject("user_metadata") ?: JSONObject()
+            val updated = current.copy(displayName = metadata.optString("full_name", cleanName))
+            prefs.edit().putString("display_name", updated.displayName).apply()
+            updated
+        }
+    }
+
+    suspend fun updateAvatar(uriString: String): AccountState = withContext(Dispatchers.IO) {
+        val current = load()
+        if (!current.signedIn || current.userId.isBlank()) throw IOException("Pehle sign in karein.")
+        val uri = Uri.parse(uriString)
+        val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+        val ext = when (mime.lowercase()) { "image/png" -> "png"; "image/webp" -> "webp"; else -> "jpg" }
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: throw IOException("Selected profile image read nahin ho saki.")
+        if (bytes.isEmpty() || bytes.size > 5 * 1024 * 1024) throw IOException("Profile image 5 MB se chhoti honi chahiye.")
+        val path = "${current.userId}/avatar_${System.currentTimeMillis()}.$ext"
+        val upload = Request.Builder().url("$base/storage/v1/object/profile-avatars/$path")
+            .header("apikey", key).header("Authorization", "Bearer ${current.accessToken}")
+            .header("Content-Type", mime).header("x-upsert", "true")
+            .post(bytes.toRequestBody(mime.toMediaType())).build()
+        client.newCall(upload).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Profile image upload failed (${response.code}).")
+        }
+        val publicUrl = "$base/storage/v1/object/public/profile-avatars/$path"
+        val payload = JSONObject().put("data", JSONObject().put("avatar_url", publicUrl))
+        val update = Request.Builder().url("$base/auth/v1/user")
+            .header("apikey", key).header("Authorization", "Bearer ${current.accessToken}")
+            .header("Content-Type", "application/json")
+            .patch(payload.toString().toRequestBody("application/json".toMediaType())).build()
+        client.newCall(update).execute().use { response ->
+            val body = JSONObject(response.body?.string().orEmpty().ifBlank { "{}" })
+            if (!response.isSuccessful) throw IOException(body.optString("message").ifBlank { "Profile photo save failed (${response.code})." })
+            val metadata = body.optJSONObject("user_metadata") ?: JSONObject()
+            val savedUrl = metadata.optString("avatar_url", publicUrl)
+            val updated = current.copy(avatarUri = savedUrl)
+            prefs.edit().putString("avatar_uri", savedUrl).apply()
+            updated
+        }
     }
 
     fun signOut(): AccountState {
@@ -79,11 +129,11 @@ class AuthRepository(context: Context) {
                 accessToken = token,
                 email = user.optString("email", email.trim()),
                 displayName = metadata.optString("full_name", name).ifBlank { email.substringBefore("@") },
-                avatarUri = load().avatarUri,
+                avatarUri = metadata.optString("avatar_url", load().avatarUri),
                 userId = user.optString("id")
             )
             prefs.edit().putString("access_token", state.accessToken)
-                .putString("email", state.email).putString("display_name", state.displayName).putString("user_id", state.userId).apply()
+                .putString("email", state.email).putString("display_name", state.displayName).putString("avatar_uri", state.avatarUri).putString("user_id", state.userId).apply()
             state
         } }
     }
