@@ -137,7 +137,8 @@ class MainActivity : ComponentActivity() {
                             account = account,
                             onAuthenticate = { email, password, name, signup -> lifecycleScope.launch { try { account = authRepository.authenticate(email, password, name, signup) } catch (e: Exception) { Toast.makeText(this@MainActivity, e.message ?: "Sign in failed", Toast.LENGTH_LONG).show() } } },
                             onSignOut = { account = authRepository.signOut() },
-                            onAvatar = { account = authRepository.saveAvatar(it) },
+                            onAvatar = { uri -> lifecycleScope.launch { try { account = authRepository.updateAvatar(uri) } catch (e: Exception) { Toast.makeText(this@MainActivity, e.message ?: "Profile photo upload failed", Toast.LENGTH_LONG).show() } } },
+                            onUpdateProfile = { name -> lifecycleScope.launch { try { account = authRepository.updateDisplayName(name); Toast.makeText(this@MainActivity, "Profile updated", Toast.LENGTH_SHORT).show() } catch (e: Exception) { Toast.makeText(this@MainActivity, e.message ?: "Profile update failed", Toast.LENGTH_LONG).show() } } },
                             onSettings = { selectedUtilityPage = "Settings" },
                             onNotifications = { selectedUtilityPage = "Notifications" },
                             onProfile = { selectedTab = "You" }
@@ -255,7 +256,7 @@ private fun StoreShell(
     onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit,
     onScreenshot: (String) -> Unit,
     account: AccountState, onAuthenticate: (String, String, String, Boolean) -> Unit,
-    onSignOut: () -> Unit, onAvatar: (String) -> Unit,
+    onSignOut: () -> Unit, onAvatar: (String) -> Unit, onUpdateProfile: (String) -> Unit,
     onSettings: () -> Unit, onNotifications: () -> Unit, onProfile: () -> Unit
 ) {
     Column(Modifier.fillMaxSize().background(DeepBlack)) {
@@ -265,7 +266,7 @@ private fun StoreShell(
                 apps, loading, error, search, onSearch, selectedCategory, onCategory,
                 onRefresh, onSelect, onScreenshot
             )
-            "You" -> ProfilePage(account, onAuthenticate, onSignOut, onAvatar)
+            "You" -> ProfilePage(account, onAuthenticate, onSignOut, onAvatar, onUpdateProfile)
             else -> HomePage(
                 apps, loading, error, selectedTab, onRefresh, onSelect, onScreenshot, account,
                 onSettings, onNotifications, onProfile
@@ -530,11 +531,11 @@ private fun AppRow(app: StoreApp, onSelect: (StoreApp) -> Unit, onScreenshot: (S
 }
 
 @Composable
-private fun ProfilePage(account: AccountState, onAuthenticate: (String, String, String, Boolean) -> Unit, onSignOut: () -> Unit, onAvatar: (String) -> Unit) {
+private fun ProfilePage(account: AccountState, onAuthenticate: (String, String, String, Boolean) -> Unit, onSignOut: () -> Unit, onAvatar: (String) -> Unit, onUpdateProfile: (String) -> Unit) {
     var signup by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf(account.email) }
     var password by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf(account.displayName) }
+    var name by remember(account.userId, account.displayName) { mutableStateOf(account.displayName) }
     val context = LocalContext.current
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -549,6 +550,8 @@ private fun ProfilePage(account: AccountState, onAuthenticate: (String, String, 
         Text(if (account.signedIn) account.displayName.ifBlank { "Your Profile" } else "Your Profile", color = Gold, fontSize = 23.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
         if (account.signedIn) {
             Text(account.email, color = Muted, modifier = Modifier.padding(8.dp))
+            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Profile name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Button(onClick = { onUpdateProfile(name) }, enabled = name.trim().length >= 2, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Emerald)) { Text("Save profile name", color = DeepBlack) }
             OutlinedButton(onClick = { picker.launch(arrayOf("image/*")) }) { Text("Change profile photo") }
             Button(onClick = onSignOut, colors = ButtonDefaults.buttonColors(containerColor = Emerald)) { Text("Sign out", color = DeepBlack) }
         } else {
