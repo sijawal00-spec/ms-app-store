@@ -108,13 +108,18 @@ class StoreRepository {
                 val responseText = response.body?.string().orEmpty()
                 if (!response.isSuccessful) return null
                 val signed = JSONObject(responseText).optString("signedURL")
-                if (signed.isBlank()) null
-                else if (signed.startsWith("http://") || signed.startsWith("https://")) signed
-                else BASE_URL + if (signed.startsWith("/")) signed else "/$signed"
+                if (signed.isBlank()) null else absoluteSignedUrl(signed)
             }
         } catch (_: Exception) {
             null
         }
+    }
+
+    private fun absoluteSignedUrl(signed: String): String {
+        if (signed.startsWith("http://") || signed.startsWith("https://")) return signed
+        val normalized = if (signed.startsWith("/")) signed else "/$signed"
+        // Supabase returns paths relative to /storage/v1, not the project root.
+        return "$BASE_URL/storage/v1$normalized"
     }
 
     suspend fun createApkDownloadUrl(path: String): String = withContext(Dispatchers.IO) {
@@ -128,7 +133,7 @@ class StoreRepository {
             if (!response.isSuccessful) throw IOException("APK download link failed (${response.code}). Storage access policy needs checking.")
             val signed = JSONObject(response.body?.string().orEmpty()).optString("signedURL")
             if (signed.isBlank()) throw IOException("Supabase did not return a download link.")
-            if (signed.startsWith("http")) signed else "$BASE_URL$signed"
+            absoluteSignedUrl(signed)
         }
     }
 }

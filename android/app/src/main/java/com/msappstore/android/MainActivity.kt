@@ -15,6 +15,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -22,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
@@ -29,6 +32,8 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,6 +82,7 @@ class MainActivity : ComponentActivity() {
     private var loading by mutableStateOf(true)
     private var error by mutableStateOf<String?>(null)
     private var selectedApp by mutableStateOf<StoreApp?>(null)
+    private var selectedScreenshotUrl by mutableStateOf<String?>(null)
     private var search by mutableStateOf("")
     private var selectedTab by mutableStateOf("Apps")
     private var selectedCategory by mutableStateOf("All")
@@ -94,8 +100,12 @@ class MainActivity : ComponentActivity() {
                 onBackground = Color.White, onSurface = Color.White
             )) {
                 Surface(Modifier.fillMaxSize(), color = DeepBlack) {
-                    if (selectedApp == null) {
-                        StoreShell(
+                    when {
+                        selectedScreenshotUrl != null -> ScreenshotViewer(
+                            imageUrl = selectedScreenshotUrl!!,
+                            onClose = { selectedScreenshotUrl = null }
+                        )
+                        selectedApp == null -> StoreShell(
                             apps = apps, loading = loading, error = error,
                             search = search, onSearch = { search = it },
                             selectedTab = selectedTab, onTab = {
@@ -106,6 +116,7 @@ class MainActivity : ComponentActivity() {
                             onCategory = { selectedCategory = it },
                             onRefresh = { loadApps() },
                             onSelect = { selectedApp = it },
+                            onScreenshot = { selectedScreenshotUrl = it },
                             account = account,
                             onAuthenticate = { email, password, name, signup -> lifecycleScope.launch { try { account = authRepository.authenticate(email, password, name, signup) } catch (e: Exception) { Toast.makeText(this@MainActivity, e.message ?: "Sign in failed", Toast.LENGTH_LONG).show() } } },
                             onSignOut = { account = authRepository.signOut() },
@@ -115,7 +126,8 @@ class MainActivity : ComponentActivity() {
                         AppDetails(
                             app = selectedApp!!, progress = downloadProgress[selectedApp!!.id],
                             onBack = { selectedApp = null },
-                            onInstall = { startDownload(selectedApp!!) }
+                            onInstall = { startDownload(selectedApp!!) },
+                            onScreenshot = { selectedScreenshotUrl = it }
                         )
                     }
                 }
@@ -134,6 +146,20 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startDownload(app: StoreApp) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()) {
+            val settingsIntent = Intent(
+                android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:$packageName")
+            )
+            startActivity(settingsIntent)
+            Toast.makeText(
+                this,
+                "Allow MS App Store to install apps, then tap Install again.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
         lifecycleScope.launch {
             try {
                 val url = repository.createApkDownloadUrl(app.apkPath)
@@ -204,6 +230,7 @@ private fun StoreShell(
     selectedTab: String, onTab: (String) -> Unit,
     selectedCategory: String, onCategory: (String) -> Unit,
     onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit,
+    onScreenshot: (String) -> Unit,
     account: AccountState, onAuthenticate: (String, String, String, Boolean) -> Unit,
     onSignOut: () -> Unit, onAvatar: (String) -> Unit
 ) {
@@ -212,11 +239,11 @@ private fun StoreShell(
         when (selectedTab) {
             "Search" -> SearchPage(
                 apps, loading, error, search, onSearch, selectedCategory, onCategory,
-                onRefresh, onSelect
+                onRefresh, onSelect, onScreenshot
             )
             "You" -> ProfilePage(account, onAuthenticate, onSignOut, onAvatar)
             else -> HomePage(
-                apps, loading, error, selectedTab, onRefresh, onSelect, account
+                apps, loading, error, selectedTab, onRefresh, onSelect, onScreenshot, account
             )
         }
         }
@@ -227,7 +254,8 @@ private fun StoreShell(
 @Composable
 private fun HomePage(
     apps: List<StoreApp>, loading: Boolean, error: String?,
-    tab: String, onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit, account: AccountState
+    tab: String, onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit,
+    onScreenshot: (String) -> Unit, account: AccountState
 ) {
     var showNotifications by remember { mutableStateOf(false) }
     val gamesOnly = tab == "Games"
@@ -254,7 +282,7 @@ private fun HomePage(
             CategoryPill("Top charts", false) { }
             CategoryPill("Categories", false) { }
         }
-        StoreContent(shown, loading, error, onRefresh, onSelect)
+        StoreContent(shown, loading, error, onRefresh, onSelect, onScreenshot)
         if (showNotifications) AlertDialog(onDismissRequest = { showNotifications = false }, title = { Text("Notifications") }, text = { Text("You are all caught up. New store updates will appear here.") }, confirmButton = { TextButton(onClick = { showNotifications = false }) { Text("OK") } })
     }
 }
@@ -264,7 +292,8 @@ private fun SearchPage(
     apps: List<StoreApp>, loading: Boolean, error: String?,
     search: String, onSearch: (String) -> Unit,
     selectedCategory: String, onCategory: (String) -> Unit,
-    onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit
+    onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit,
+    onScreenshot: (String) -> Unit
 ) {
     if (selectedCategory != "All") {
         val categoryApps = apps.filter { it.category.equals(selectedCategory, true) }
@@ -297,7 +326,7 @@ private fun SearchPage(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(categoryApps, key = { "category-${it.id}" }) { app -> AppRow(app, onSelect) }
+                    items(categoryApps, key = { "category-${it.id}" }) { app -> AppRow(app, onSelect, onScreenshot) }
                 }
             }
         }
@@ -361,7 +390,7 @@ private fun SearchPage(
                     Text("No apps found.", color = Muted, modifier = Modifier.padding(18.dp))
                 }
             }
-            items(matchingApps, key = { "search-${it.id}" }) { app -> AppRow(app, onSelect) }
+            items(matchingApps, key = { "search-${it.id}" }) { app -> AppRow(app, onSelect, onScreenshot) }
         }
     }
 }
@@ -404,7 +433,8 @@ private fun CategoryPill(label: String, selected: Boolean, onClick: () -> Unit) 
 @Composable
 private fun StoreContent(
     apps: List<StoreApp>, loading: Boolean, error: String?,
-    onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit
+    onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit,
+    onScreenshot: (String) -> Unit
 ) {
     when {
         loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -427,13 +457,13 @@ private fun StoreContent(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(apps, key = { it.id }) { app -> AppRow(app, onSelect) }
+            items(apps, key = { it.id }) { app -> AppRow(app, onSelect, onScreenshot) }
         }
     }
 }
 
 @Composable
-private fun AppRow(app: StoreApp, onSelect: (StoreApp) -> Unit) {
+private fun AppRow(app: StoreApp, onSelect: (StoreApp) -> Unit, onScreenshot: (String) -> Unit) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(DeepGreen)
             .clickable { onSelect(app) }.padding(14.dp)
@@ -463,7 +493,8 @@ private fun AppRow(app: StoreApp, onSelect: (StoreApp) -> Unit) {
                 items(app.screenshotUrls) { screenshot ->
                     AsyncImage(model = screenshot, contentDescription = "${app.name} screenshot",
                         modifier = Modifier.width(174.dp).height(104.dp)
-                            .clip(RoundedCornerShape(12.dp)),
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onScreenshot(screenshot) },
                         contentScale = ContentScale.Crop)
                 }
             }
@@ -532,7 +563,37 @@ private fun NavItem(label: String, selected: Boolean, icon: @Composable () -> Un
 }
 
 @Composable
-private fun AppDetails(app: StoreApp, progress: Int?, onBack: () -> Unit, onInstall: () -> Unit) {
+private fun ScreenshotViewer(imageUrl: String, onClose: () -> Unit) {
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            Modifier.fillMaxSize().background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = "Full screen app screenshot",
+                modifier = Modifier.fillMaxWidth().fillMaxHeight(0.88f),
+                contentScale = ContentScale.Fit
+            )
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)
+                    .background(DeepGreen.copy(alpha = 0.85f), CircleShape)
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "Close screenshot", tint = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppDetails(
+    app: StoreApp, progress: Int?, onBack: () -> Unit,
+    onInstall: () -> Unit, onScreenshot: (String) -> Unit
+) {
     Column(Modifier.fillMaxSize().background(DeepBlack)) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
@@ -540,7 +601,7 @@ private fun AppDetails(app: StoreApp, progress: Int?, onBack: () -> Unit, onInst
             }
             Text("App details", color = Gold, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         }
-        Column(Modifier.padding(20.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (!app.iconUrl.isNullOrBlank()) AsyncImage(model = app.iconUrl, contentDescription = app.name,
                     modifier = Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)),
@@ -563,7 +624,8 @@ private fun AppDetails(app: StoreApp, progress: Int?, onBack: () -> Unit, onInst
                     items(app.screenshotUrls) { screenshot ->
                         AsyncImage(model = screenshot, contentDescription = "${app.name} screenshot",
                             modifier = Modifier.width(240.dp).height(144.dp)
-                                .clip(RoundedCornerShape(14.dp)),
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable { onScreenshot(screenshot) },
                             contentScale = ContentScale.Crop)
                     }
                 }
