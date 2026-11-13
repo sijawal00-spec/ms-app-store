@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
                             onNavigate = { selectedUtilityPage = it },
                             onOpenProfile = { selectedUtilityPage = null; selectedTab = "You" },
                             onOpenDeveloper = {
-                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://sijawal00-spec.github.io/ms-app-store/")))
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://sijawal00-spec.github.io/ms-app-store/?open=developer")))
                             }
                         )
                         selectedApp == null -> StoreShell(
