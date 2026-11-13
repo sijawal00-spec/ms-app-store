@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -533,11 +534,19 @@ private fun AppRow(app: StoreApp, onSelect: (StoreApp) -> Unit, onScreenshot: (S
 }
 
 @Composable
-private fun ProfilePage(account: AccountState, onAuthenticate: (String, String, String, Boolean) -> Unit, onSignOut: () -> Unit, onAvatar: (String) -> Unit, onUpdateProfile: (String) -> Unit) {
+private fun ProfilePage(
+    account: AccountState,
+    onAuthenticate: (String, String, String, Boolean) -> Unit,
+    onSignOut: () -> Unit,
+    onAvatar: (String) -> Unit,
+    onUpdateProfile: (String) -> Unit
+) {
     var signup by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf(account.email) }
     var password by remember { mutableStateOf("") }
     var name by remember(account.userId, account.displayName) { mutableStateOf(account.displayName) }
+    var menuExpanded by remember { mutableStateOf(false) }
+    var editNameDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -545,24 +554,83 @@ private fun ProfilePage(account: AccountState, onAuthenticate: (String, String, 
             onAvatar(uri.toString())
         }
     }
-    Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Spacer(Modifier.height(24.dp))
-        if (account.avatarUri.isNotBlank()) AsyncImage(account.avatarUri, contentDescription = "Profile photo", modifier = Modifier.size(92.dp).clip(CircleShape).clickable { picker.launch(arrayOf("image/*")) }, contentScale = ContentScale.Crop)
-        else Box(Modifier.size(92.dp).clip(CircleShape).background(DeepGreen).clickable { picker.launch(arrayOf("image/*")) }, contentAlignment = Alignment.Center) { Icon(Icons.Default.Person, contentDescription = "Choose photo", tint = Gold, modifier = Modifier.size(48.dp)) }
-        Text(if (account.signedIn) account.displayName.ifBlank { "Your Profile" } else "Your Profile", color = Gold, fontSize = 23.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
+
+    if (editNameDialog) {
+        AlertDialog(
+            onDismissRequest = { editNameDialog = false },
+            title = { Text("Save profile name") },
+            text = { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Profile name") }, singleLine = true) },
+            confirmButton = {
+                TextButton(onClick = { onUpdateProfile(name); editNameDialog = false }, enabled = name.trim().length >= 2) {
+                    Text("Save", color = Emerald)
+                }
+            },
+            dismissButton = { TextButton(onClick = { editNameDialog = false }) { Text("Cancel", color = Muted) } },
+            containerColor = DeepGreen, titleContentColor = Gold, textContentColor = Color.White
+        )
+    }
+
+    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Profile", color = Gold, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            if (account.signedIn) {
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Profile options", tint = Gold)
+                    }
+                    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }, modifier = Modifier.background(DeepGreen)) {
+                        DropdownMenuItem(
+                            text = { Text("Save profile name", color = Color.White) },
+                            onClick = { menuExpanded = false; editNameDialog = true }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Upload profile image", color = Color.White) },
+                            onClick = { menuExpanded = false; picker.launch(arrayOf("image/*")) }
+                        )
+                        HorizontalDivider(color = Muted.copy(alpha = 0.25f))
+                        DropdownMenuItem(
+                            text = { Text("Log out", color = Color(0xFFFF8A80)) },
+                            onClick = { menuExpanded = false; onSignOut() }
+                        )
+                    }
+                }
+            }
+        }
+
         if (account.signedIn) {
-            Text(account.email, color = Muted, modifier = Modifier.padding(8.dp))
-            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Profile name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Button(onClick = { onUpdateProfile(name) }, enabled = name.trim().length >= 2, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Emerald)) { Text("Save profile name", color = DeepBlack) }
-            OutlinedButton(onClick = { picker.launch(arrayOf("image/*")) }) { Text("Change profile photo") }
-            Button(onClick = onSignOut, colors = ButtonDefaults.buttonColors(containerColor = Emerald)) { Text("Sign out", color = DeepBlack) }
+            Column(Modifier.fillMaxWidth().weight(1f).padding(top = 26.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                if (account.avatarUri.isNotBlank()) {
+                    AsyncImage(model = account.avatarUri, contentDescription = "Profile photo",
+                        modifier = Modifier.size(104.dp).clip(CircleShape), contentScale = ContentScale.Crop)
+                } else {
+                    Box(Modifier.size(104.dp).clip(CircleShape).background(DeepGreen), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Person, contentDescription = "Profile", tint = Gold, modifier = Modifier.size(52.dp))
+                    }
+                }
+                Text(account.displayName.ifBlank { "Your Profile" }, color = Color.White, fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 14.dp))
+                Text(account.email, color = Muted, modifier = Modifier.padding(top = 6.dp))
+                Text("Manage your profile using the three-dot menu above.", color = Muted, fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 18.dp))
+            }
         } else {
-            Text(if (signup) "Create your account" else "Sign in to MS App Store", color = Muted, modifier = Modifier.padding(vertical = 12.dp))
-            if (signup) OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Password") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Button(onClick = { onAuthenticate(email, password, name, signup) }, modifier = Modifier.fillMaxWidth().padding(top = 14.dp), enabled = email.contains("@") && password.length >= 6, colors = ButtonDefaults.buttonColors(containerColor = Emerald)) { Text(if (signup) "Create account" else "Sign in", color = DeepBlack) }
-            TextButton(onClick = { signup = !signup }) { Text(if (signup) "Already have an account? Sign in" else "New here? Create an account", color = Gold) }
+            Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+                Spacer(Modifier.height(24.dp))
+                Icon(Icons.Default.Person, contentDescription = null, tint = Gold, modifier = Modifier.size(54.dp))
+                Text(if (signup) "Create your account" else "Sign in to MS App Store", color = Gold, fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 12.dp))
+                if (signup) OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Password") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Button(onClick = { onAuthenticate(email, password, name, signup) }, modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+                    enabled = email.contains("@") && password.length >= 6, colors = ButtonDefaults.buttonColors(containerColor = Emerald)) {
+                    Text(if (signup) "Create account" else "Sign in", color = DeepBlack)
+                }
+                TextButton(onClick = { signup = !signup }) {
+                    Text(if (signup) "Already have an account? Sign in" else "New here? Create an account", color = Gold)
+                }
+            }
         }
     }
 }
