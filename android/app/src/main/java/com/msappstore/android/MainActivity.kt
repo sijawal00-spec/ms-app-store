@@ -97,6 +97,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         authRepository = AuthRepository(this)
         account = authRepository.load()
+        lifecycleScope.launch { try { account = authRepository.refreshProfile() } catch (_: Exception) { } }
         loadApps()
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(
@@ -128,6 +129,7 @@ class MainActivity : ComponentActivity() {
                             selectedTab = selectedTab, onTab = {
                                 selectedTab = it
                                 if (it != "Search") { search = ""; selectedCategory = "All" }
+                                if (it == "You") lifecycleScope.launch { try { account = authRepository.refreshProfile() } catch (_: Exception) { } }
                             },
                             selectedCategory = selectedCategory,
                             onCategory = { selectedCategory = it },
