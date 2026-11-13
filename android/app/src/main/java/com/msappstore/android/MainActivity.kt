@@ -564,6 +564,87 @@ private fun NavItem(label: String, selected: Boolean, icon: @Composable () -> Un
 }
 
 @Composable
+private fun UtilityPage(
+    page: String, versionName: String, versionCode: Int, account: AccountState,
+    onBack: () -> Unit, onNavigate: (String) -> Unit,
+    onOpenProfile: () -> Unit, onOpenDeveloper: () -> Unit
+) {
+    Column(Modifier.fillMaxSize().background(DeepBlack)) {
+        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) }
+            Text(page, color = Gold, fontWeight = FontWeight.Bold, fontSize = 21.sp)
+        }
+        when (page) {
+            "Settings" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("MS App Store settings", color = Muted, fontSize = 13.sp)
+                SettingsRow("Notifications", "Store updates and alerts") { onNavigate("Notifications") }
+                SettingsRow("Profile", "View your account and profile details", onOpenProfile)
+                SettingsRow("Developer Account", "Create or apply for a developer account", onOpenDeveloper)
+                SettingsRow("App Policy", "Read the store rules and publishing policy") { onNavigate("App Policy") }
+                SettingsRow("App About", "Version and application information") { onNavigate("App About") }
+            }
+            "Notifications" -> Column(Modifier.padding(20.dp)) {
+                Icon(Icons.Default.Notifications, contentDescription = null, tint = Gold, modifier = Modifier.size(42.dp))
+                Text("Notifications", color = Gold, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(12.dp))
+                Text("You are all caught up. Store announcements and account updates will appear here when available.", color = Muted, lineHeight = 22.sp)
+            }
+            "App Policy" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
+                Text("MS App Store Policy", color = Gold, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("Effective date: 13 November 2026", color = Muted, fontSize = 12.sp)
+                PolicySection("1. Purpose", "MS App Store provides a platform to discover and download Android applications and games. Apps are published only after store review and approval.")
+                PolicySection("2. Developer responsibility", "Developers must provide accurate app names, descriptions, version details, package names, icons, screenshots and contact information. Developers are responsible for maintaining their apps.")
+                PolicySection("3. Security and harmful content", "Apps must not contain malware, spyware, hidden data collection, deceptive behavior, unauthorized access, or features intended to damage devices or users. Unsafe apps may be rejected or removed.")
+                PolicySection("4. Legal content and intellectual property", "Developers may upload only content they own or are authorized to distribute. Impersonation, copyright infringement, stolen apps and illegal content are prohibited.")
+                PolicySection("5. Review and publishing", "Submitting an app does not guarantee publication. MS App Store may review, reject, suspend or remove apps that violate this policy, applicable law or user safety.")
+                PolicySection("6. User downloads", "Users should review app details and permissions before installing. Download availability is not a guarantee that an app is endorsed, secure or free from defects.")
+                PolicySection("7. Privacy", "Developers must explain their app's data practices and obtain any consent required by applicable law. Do not submit another person's personal or confidential information without authorization.")
+                PolicySection("8. Updates and availability", "App information, availability and versions may change. Developers should promptly provide security fixes and accurate update information.")
+                PolicySection("9. Reporting and enforcement", "Users may report suspicious, unsafe, misleading or infringing apps to the store operator. MS App Store may investigate and remove violating apps.")
+                PolicySection("10. Policy changes", "This policy may be updated to improve safety, clarity and compliance. The current version displayed in the app is the applicable store policy, subject to local law.")
+                Text("Contact: Use the contact details published on the official MS App Store website for policy or safety reports.", color = Muted, fontSize = 12.sp)
+            }
+            "App About" -> Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                Text("MS App Store", color = Gold, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                Text("Android app marketplace", color = Muted)
+                Spacer(Modifier.height(18.dp))
+                AboutRow("Version Name", versionName)
+                AboutRow("Version Code", versionCode.toString())
+                AboutRow("Application ID", "com.msappstore.android")
+                AboutRow("Platform", "Android")
+                AboutRow("Minimum Android", "Android 8.0 (API 26)")
+                AboutRow("Publisher", "MS App Store")
+                Spacer(Modifier.height(12.dp))
+                Text("Discover apps and games, view app details and screenshots, and download published APKs from MS App Store.", color = Muted, lineHeight = 22.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(DeepGreen).clickable(onClick = onClick).padding(16.dp)) {
+        Text(title, color = Color.White, fontWeight = FontWeight.Bold)
+        Text(subtitle, color = Muted, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun PolicySection(title: String, body: String) {
+    Text(title, color = Gold, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+    Text(body, color = Muted, lineHeight = 20.sp)
+}
+
+@Composable
+private fun AboutRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Muted, fontSize = 13.sp)
+        Text(value, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+    HorizontalDivider(color = DeepGreen)
+}
+
+@Composable
 private fun ScreenshotViewer(imageUrl: String, onClose: () -> Unit) {
     Dialog(
         onDismissRequest = onClose,
