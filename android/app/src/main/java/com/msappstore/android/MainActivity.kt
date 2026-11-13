@@ -122,13 +122,14 @@ class MainActivity : ComponentActivity() {
                             onSignOut = { account = authRepository.signOut() },
                             onAvatar = { account = authRepository.saveAvatar(it) }
                         )
-                    } else {
+                        selectedApp != null -> {
                         AppDetails(
                             app = selectedApp!!, progress = downloadProgress[selectedApp!!.id],
                             onBack = { selectedApp = null },
                             onInstall = { startDownload(selectedApp!!) },
                             onScreenshot = { selectedScreenshotUrl = it }
                         )
+                        }
                     }
                 }
             }
