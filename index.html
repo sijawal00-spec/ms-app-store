@@ -259,10 +259,10 @@ window.replaceDashboardAppIcon=async appId=>{
   if(window.iconManagerReturnView==='user'&&app.user_id!==currentUser.id)throw new Error('Sirf apni app ka icon badal sakte hain.');
   const file=$('replaceAppIconInput')?.files?.[0];
   if(!file)throw new Error('Pehle naya app icon select karein.');
-  const newPath=await uploadAppIcon(file,'replaceAppIconStatus',app.id);
+  newPath=await uploadAppIcon(file,'replaceAppIconStatus',app.id);
   const {error}=await sb.from('apps').update({icon_path:newPath}).eq('id',app.id);
   if(error)throw error;
-  if(app.icon_path&&!/^https?:\\/\\//i.test(app.icon_path)){
+  if(app.icon_path&&!app.icon_path.startsWith('http')){
    const removed=await sb.storage.from('app-screenshots').remove([app.icon_path]);
    if(removed.error)console.warn('Old icon cleanup failed:',removed.error.message);
   }
