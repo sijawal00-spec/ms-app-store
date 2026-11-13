@@ -14,7 +14,8 @@ data class AccountState(
     val accessToken: String = "",
     val email: String = "",
     val displayName: String = "",
-    val avatarUri: String = ""
+    val avatarUri: String = "",
+    val userId: String = ""
 ) {
     val signedIn: Boolean get() = accessToken.isNotBlank()
 }
@@ -29,7 +30,8 @@ class AuthRepository(context: Context) {
         accessToken = prefs.getString("access_token", "").orEmpty(),
         email = prefs.getString("email", "").orEmpty(),
         displayName = prefs.getString("display_name", "").orEmpty(),
-        avatarUri = prefs.getString("avatar_uri", "").orEmpty()
+        avatarUri = prefs.getString("avatar_uri", "").orEmpty(),
+        userId = prefs.getString("user_id", "").orEmpty()
     )
 
     fun saveAvatar(uri: String): AccountState {
@@ -68,10 +70,11 @@ class AuthRepository(context: Context) {
                 accessToken = token,
                 email = user.optString("email", email.trim()),
                 displayName = metadata.optString("full_name", name).ifBlank { email.substringBefore("@") },
-                avatarUri = load().avatarUri
+                avatarUri = load().avatarUri,
+                userId = user.optString("id")
             )
             prefs.edit().putString("access_token", state.accessToken)
-                .putString("email", state.email).putString("display_name", state.displayName).apply()
+                .putString("email", state.email).putString("display_name", state.displayName).putString("user_id", state.userId).apply()
             state
         } }
     }

@@ -32,6 +32,9 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -144,7 +147,8 @@ class MainActivity : ComponentActivity() {
                             app = selectedApp!!, progress = downloadProgress[selectedApp!!.id],
                             onBack = { selectedApp = null },
                             onInstall = { startDownload(selectedApp!!) },
-                            onScreenshot = { selectedScreenshotUrl = it }
+                            onScreenshot = { selectedScreenshotUrl = it },
+                            account = account, repository = repository
                         )
                         }
                     }
@@ -191,7 +195,7 @@ class MainActivity : ComponentActivity() {
                 val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                 val downloadId = manager.enqueue(request)
                 downloadProgress = downloadProgress + (app.id to 0)
-                monitorDownload(manager, downloadId, app)
+                monitorDownload(manager, downloadId, app, account)
                 Toast.makeText(this@MainActivity, "Download started", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(this@MainActivity, e.message ?: "Download failed", Toast.LENGTH_LONG).show()
@@ -199,7 +203,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private suspend fun monitorDownload(manager: DownloadManager, id: Long, app: StoreApp) {
+    private suspend fun monitorDownload(manager: DownloadManager, id: Long, app: StoreApp, signedInAccount: AccountState) {
         withContext(Dispatchers.IO) {
             var finished = false
             while (!finished) {
@@ -214,6 +218,7 @@ class MainActivity : ComponentActivity() {
                             withContext(Dispatchers.Main) { downloadProgress = downloadProgress + (app.id to percent) }
                         }
                         if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                            if (signedInAccount.signedIn && signedInAccount.userId.isNotBlank()) { try { repository.recordDownload(app.id, signedInAccount.accessToken, signedInAccount.userId) } catch (_: Exception) { } }
                             finished = true
                             val uri = manager.getUriForDownloadedFile(id)
                             withContext(Dispatchers.Main) {

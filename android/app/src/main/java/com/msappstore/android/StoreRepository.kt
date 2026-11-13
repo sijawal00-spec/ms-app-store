@@ -23,8 +23,11 @@ data class StoreApp(
     val packageName: String,
     val iconUrl: String?,
     val screenshotUrls: List<String>,
-    val apkPath: String
+    val apkPath: String,
+    val apkSizeBytes: Long
 )
+
+data class AppReview(val id: String, val userName: String, val avatarUrl: String, val rating: Int, val comment: String, val createdAt: String)
 
 class StoreRepository {
     companion object {
@@ -44,7 +47,7 @@ class StoreRepository {
         .header("Authorization", "Bearer $PUBLISHABLE_KEY")
 
     suspend fun loadPublishedApps(): List<StoreApp> = withContext(Dispatchers.IO) {
-        val url = "$BASE_URL/rest/v1/apps?select=id,name,developer_name,app_type,category,version,description,package_name,icon_path,apk_path&status=eq.approved&order=created_at.desc"
+        val url = "$BASE_URL/rest/v1/apps?select=id,name,developer_name,app_type,category,version,description,package_name,icon_path,apk_path,apk_size_bytes&status=eq.approved&order=created_at.desc"
         val request = requestBuilder(url).get().build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IOException("Store load failed (${response.code}): ${response.body?.string().orEmpty()}")
@@ -65,7 +68,8 @@ class StoreRepository {
                             packageName = item.optString("package_name", ""),
                             iconUrl = iconPath?.let { signedAssetUrl("app-screenshots", it) },
                             screenshotUrls = loadScreenshotUrls(item.optString("id")),
-                            apkPath = item.optString("apk_path", "")
+                            apkPath = item.optString("apk_path", ""),
+                            apkSizeBytes = item.optLong("apk_size_bytes", 0L)
                         )
                     )
                 }
@@ -120,6 +124,54 @@ class StoreRepository {
         val normalized = if (signed.startsWith("/")) signed else "/$signed"
         // Supabase returns paths relative to /storage/v1, not the project root.
         return "$BASE_URL/storage/v1$normalized"
+    }
+
+
+    suspend fun loadAppReviews(appId: String): List<AppReview> = withContext(Dispatchers.IO) {
+        val request = requestBuilder("$BASE_URL/rest/v1/app_reviews?select=id,user_name,avatar_url,rating,comment,created_at&app_id=eq.${Uri.encode(appId)}&order=created_at.desc&limit=100").get().build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Reviews load failed (${response.code}).")
+            val rows = JSONArray(response.body?.string().orEmpty())
+            buildList {
+                for (i in 0 until rows.length()) {
+                    val row = rows.getJSONObject(i)
+                    add(AppReview(row.optString("id"), row.optString("user_name", "User"), row.optString("avatar_url", ""), row.optInt("rating"), row.optString("comment"), row.optString("created_at")))
+                }
+            }
+        }
+    }
+
+    suspend fun submitAppReview(appId: String, accessToken: String, userId: String, userName: String, avatarUrl: String, rating: Int, comment: String) = withContext(Dispatchers.IO) {
+        val payload = JSONObject().put("app_id", appId).put("user_id", userId)
+            .put("user_name", userName).put("avatar_url", avatarUrl)
+            .put("rating", rating).put("comment", comment.trim())
+        val request = Request.Builder().url("$BASE_URL/rest/v1/app_reviews?on_conflict=app_id,user_id")
+            .header("apikey", PUBLISHABLE_KEY).header("Authorization", "Bearer $accessToken")
+            .header("Content-Type", "application/json").header("Prefer", "resolution=merge-duplicates,return=minimal")
+            .post(payload.toString().toRequestBody("application/json".toMediaType())).build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Review post failed (${response.code}): ${response.body?.string().orEmpty()}")
+        }
+    }
+
+    suspend fun loadDownloadCount(appId: String): Int = withContext(Dispatchers.IO) {
+        val request = requestBuilder("$BASE_URL/rest/v1/app_downloads?select=id&app_id=eq.${Uri.encode(appId)}")
+            .header("Prefer", "count=exact").header("Range", "0-0").get().build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return@withContext 0
+            val total = response.header("Content-Range")?.substringAfter("/")?.toIntOrNull()
+            total ?: JSONArray(response.body?.string().orEmpty()).length()
+        }
+    }
+
+    suspend fun recordDownload(appId: String, accessToken: String, userId: String) = withContext(Dispatchers.IO) {
+        val payload = JSONObject().put("app_id", appId).put("user_id", userId)
+        val request = Request.Builder().url("$BASE_URL/rest/v1/app_downloads")
+            .header("apikey", PUBLISHABLE_KEY).header("Authorization", "Bearer $accessToken")
+            .header("Content-Type", "application/json").post(payload.toString().toRequestBody("application/json".toMediaType())).build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Download count update failed (${response.code}).")
+        }
     }
 
     suspend fun createApkDownloadUrl(path: String): String = withContext(Dispatchers.IO) {
