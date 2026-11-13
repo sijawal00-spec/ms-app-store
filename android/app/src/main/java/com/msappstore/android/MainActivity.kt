@@ -9,6 +9,8 @@ import android.os.Bundle
 import android.os.Environment
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -67,6 +70,8 @@ private val allCategories = appCategories + gameCategories
 
 class MainActivity : ComponentActivity() {
     private val repository = StoreRepository()
+    private lateinit var authRepository: AuthRepository
+    private var account by mutableStateOf(AccountState())
     private var apps by mutableStateOf<List<StoreApp>>(emptyList())
     private var loading by mutableStateOf(true)
     private var error by mutableStateOf<String?>(null)
@@ -78,6 +83,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        authRepository = AuthRepository(this)
+        account = authRepository.load()
         loadApps()
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(
@@ -97,7 +104,11 @@ class MainActivity : ComponentActivity() {
                             selectedCategory = selectedCategory,
                             onCategory = { selectedCategory = it },
                             onRefresh = { loadApps() },
-                            onSelect = { selectedApp = it }
+                            onSelect = { selectedApp = it },
+                            account = account,
+                            onAuthenticate = { email, password, name, signup -> lifecycleScope.launch { try { account = authRepository.authenticate(email, password, name, signup) } catch (e: Exception) { Toast.makeText(this@MainActivity, e.message ?: "Sign in failed", Toast.LENGTH_LONG).show() } } },
+                            onSignOut = { account = authRepository.signOut() },
+                            onAvatar = { account = authRepository.saveAvatar(it) }
                         )
                     } else {
                         AppDetails(
@@ -191,7 +202,9 @@ private fun StoreShell(
     search: String, onSearch: (String) -> Unit,
     selectedTab: String, onTab: (String) -> Unit,
     selectedCategory: String, onCategory: (String) -> Unit,
-    onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit
+    onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit,
+    account: AccountState, onAuthenticate: (String, String, String, Boolean) -> Unit,
+    onSignOut: () -> Unit, onAvatar: (String) -> Unit
 ) {
     Column(Modifier.fillMaxSize().background(DeepBlack)) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -200,9 +213,9 @@ private fun StoreShell(
                 apps, loading, error, search, onSearch, selectedCategory, onCategory,
                 onRefresh, onSelect
             )
-            "You" -> ProfilePage()
+            "You" -> ProfilePage(account, onAuthenticate, onSignOut, onAvatar)
             else -> HomePage(
-                apps, loading, error, selectedTab, onRefresh, onSelect
+                apps, loading, error, selectedTab, onRefresh, onSelect, account
             )
         }
         }
@@ -213,7 +226,7 @@ private fun StoreShell(
 @Composable
 private fun HomePage(
     apps: List<StoreApp>, loading: Boolean, error: String?,
-    tab: String, onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit
+    tab: String, onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit, account: AccountState
 ) {
     val gamesOnly = tab == "Games"
     val shown = apps.filter { (it.appType.equals("game", true)) == gamesOnly }
@@ -439,20 +452,35 @@ private fun AppRow(app: StoreApp, onSelect: (StoreApp) -> Unit) {
 }
 
 @Composable
-private fun ProfilePage() {
-    Column(
-        Modifier.fillMaxSize().padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(Modifier.height(28.dp))
-        Box(Modifier.size(82.dp).clip(CircleShape).background(DeepGreen),
-            contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.Person, contentDescription = null, tint = Gold, modifier = Modifier.size(42.dp))
+private fun ProfilePage(account: AccountState, onAuthenticate: (String, String, String, Boolean) -> Unit, onSignOut: () -> Unit, onAvatar: (String) -> Unit) {
+    var signup by remember { mutableStateOf(false) }
+    var email by remember { mutableStateOf(account.email) }
+    var password by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(account.displayName) }
+    val context = LocalContext.current
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            try { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
+            onAvatar(uri.toString())
         }
-        Spacer(Modifier.height(16.dp))
-        Text("Your Profile", color = Gold, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-        Text("Sign-in and account profile will be added in the profile update.", color = Muted,
-            modifier = Modifier.padding(top = 8.dp))
+    }
+    Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Spacer(Modifier.height(24.dp))
+        if (account.avatarUri.isNotBlank()) AsyncImage(account.avatarUri, contentDescription = "Profile photo", modifier = Modifier.size(92.dp).clip(CircleShape).clickable { picker.launch("image/*") }, contentScale = ContentScale.Crop)
+        else Box(Modifier.size(92.dp).clip(CircleShape).background(DeepGreen).clickable { picker.launch("image/*") }, contentAlignment = Alignment.Center) { Icon(Icons.Default.Person, contentDescription = "Choose photo", tint = Gold, modifier = Modifier.size(48.dp)) }
+        Text(if (account.signedIn) account.displayName.ifBlank { "Your Profile" } else "Your Profile", color = Gold, fontSize = 23.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
+        if (account.signedIn) {
+            Text(account.email, color = Muted, modifier = Modifier.padding(8.dp))
+            OutlinedButton(onClick = { picker.launch("image/*") }) { Text("Change profile photo") }
+            Button(onClick = onSignOut, colors = ButtonDefaults.buttonColors(containerColor = Emerald)) { Text("Sign out", color = DeepBlack) }
+        } else {
+            Text(if (signup) "Create your account" else "Sign in to MS App Store", color = Muted, modifier = Modifier.padding(vertical = 12.dp))
+            if (signup) OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Password") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Button(onClick = { onAuthenticate(email, password, name, signup) }, modifier = Modifier.fillMaxWidth().padding(top = 14.dp), enabled = email.contains("@") && password.length >= 6, colors = ButtonDefaults.buttonColors(containerColor = Emerald)) { Text(if (signup) "Create account" else "Sign in", color = DeepBlack) }
+            TextButton(onClick = { signup = !signup }) { Text(if (signup) "Already have an account? Sign in" else "New here? Create an account", color = Gold) }
+        }
     }
 }
 
