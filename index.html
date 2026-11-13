@@ -227,6 +227,55 @@ window.toggleDashboardScreenshotManager=async(appId,mode)=>{
   $('cancelReplaceScreenshotsBtn').onclick=()=>{host.innerHTML='';};
  }catch(e){msg('Screenshot manager error: '+e.message,true);}
 };
+window.toggleDashboardIconManager=async(appId,mode)=>{
+ try{
+  await requireClient();
+  if(!currentUser)throw new Error('Pehle sign in karein.');
+  if(mode==='admin'&&!isAdmin)throw new Error('Admin access required.');
+  const host=$('dash-icon-'+appId);if(!host)throw new Error('Dashboard app panel nahin mila.');
+  if(host.innerHTML.trim()){host.innerHTML='';return;}
+  document.querySelectorAll('[id^="dash-icon-"]').forEach(el=>{if(el!==host)el.innerHTML='';});
+  document.querySelectorAll('[id^="dash-shot-"]').forEach(el=>el.innerHTML='');
+  let q=sb.from('apps').select('id,user_id,name,icon_path').eq('id',appId);
+  if(mode==='user')q=q.eq('user_id',currentUser.id);
+  const {data:app,error}=await q.single();if(error)throw error;
+  currentDetailApp=app;window.iconManagerReturnView=mode;
+  const currentUrl=await signedAsset('app-screenshots',app.icon_path);
+  host.innerHTML='<div class="panel"><h3>Change App Icon — '+escapeHtml(app.name)+'</h3><p class="small">Naya icon JPG, PNG ya WEBP mein select karein. Purana icon replace ho jayega.</p>'+(currentUrl?'<div class="row"><img src="'+escapeHtml(currentUrl)+'" alt="Current app icon" style="width:76px;height:76px;object-fit:cover;border-radius:14px"><span class="small">Current icon</span></div>':'<div class="small">Abhi icon set nahin hai.</div>')+'<label>New App Icon</label><input id="replaceAppIconInput" type="file" accept="image/png,image/jpeg,image/webp"><div id="replaceAppIconStatus" class="small">Maximum file size 10 MB.</div><div class="upload-preview-box"><b>New Icon Preview</b><div id="replaceAppIconPreview" class="icon-preview-content">Naya icon select karein.</div></div><div class="actions"><button class="gold" id="replaceAppIconBtn" type="button">Save / Replace Icon</button><button class="secondary" id="cancelReplaceAppIconBtn" type="button">Cancel</button></div></div>';
+  bindImagePreview('replaceAppIconInput','replaceAppIconPreview');
+  $('replaceAppIconBtn').onclick=()=>window.replaceDashboardAppIcon(appId);
+  $('cancelReplaceAppIconBtn').onclick=()=>{host.innerHTML='';};
+ }catch(e){msg('Icon manager error: '+e.message,true);}
+};
+window.replaceDashboardAppIcon=async appId=>{
+ let newPath=null;
+ try{
+  await requireClient();
+  if(!currentUser)throw new Error('Pehle sign in karein.');
+  const app=currentDetailApp;
+  if(!app||String(app.id)!==String(appId))throw new Error('App details dobara open karein.');
+  if(!isAdmin&&app.user_id!==currentUser.id)throw new Error('Sirf app owner ya Admin icon badal sakta hai.');
+  if(window.iconManagerReturnView==='admin'&&!isAdmin)throw new Error('Admin access required.');
+  if(window.iconManagerReturnView==='user'&&app.user_id!==currentUser.id)throw new Error('Sirf apni app ka icon badal sakte hain.');
+  const file=$('replaceAppIconInput')?.files?.[0];
+  if(!file)throw new Error('Pehle naya app icon select karein.');
+  const newPath=await uploadAppIcon(file,'replaceAppIconStatus',app.id);
+  const {error}=await sb.from('apps').update({icon_path:newPath}).eq('id',app.id);
+  if(error)throw error;
+  if(app.icon_path&&!/^https?:\\/\\//i.test(app.icon_path)){
+   const removed=await sb.storage.from('app-screenshots').remove([app.icon_path]);
+   if(removed.error)console.warn('Old icon cleanup failed:',removed.error.message);
+  }
+  app.icon_path=newPath;
+  msg('App icon successfully update ho gaya.');
+  if(window.iconManagerReturnView==='admin')await loadAdmin();else await loadMyApps();
+  if(currentUser&&isAdmin)await loadStore();
+ }catch(err){
+  if(newPath)await sb.storage.from('app-screenshots').remove([newPath]);
+  const status=$('replaceAppIconStatus');if(status){status.textContent=err.message;status.classList.add('error');}
+  msg('App icon update error: '+err.message,true);
+ }
+};
 window.replaceAppScreenshots=async appId=>{
  let uploadedPaths=[];
  try{
@@ -388,7 +437,7 @@ async function loadMyApps(){
  // User ki apni uploads dashboard mein rahengi; admin ki apni published apps user dashboard mein nahin dikhengi.
  const rows=(data||[]).filter(a=>!(a.status==='approved'&&a.reviewed_by===a.user_id));
  $('userStats').innerHTML=[['Total',rows.length],['Pending',rows.filter(x=>x.status==='pending').length],['Approved',rows.filter(x=>x.status==='approved').length],['Rejected',rows.filter(x=>x.status==='rejected').length]].map(([n,v])=>`<div class="stat"><span class="small">${n}</span><b>${v}</b></div>`).join('');
- $('myApps').innerHTML=rows.length?rows.map(a=>{const st=statusLabel(a.status,a.review_deadline);return `<div class="item"><div class="row between"><b>${escapeHtml(a.name)}</b><span class="status ${st}">${nice(st)}</span></div><div class="small">${escapeHtml(a.category)} · v${escapeHtml(a.version)} · Submitted ${new Date(a.submitted_at).toLocaleString()}</div><div class="deadline">48-hour deadline: ${new Date(a.review_deadline).toLocaleString()}</div>${a.admin_comment?`<p>Admin comment: ${escapeHtml(a.admin_comment)}</p>`:''}${a.rejection_reason?`<p class="error">Reason: ${escapeHtml(a.rejection_reason)}</p>`:''}<div class="actions"><button class="secondary" onclick="openUserOwnedApp('${a.id}')">Open App Page / Manage</button><button class="gold" onclick="toggleDashboardScreenshotManager('${a.id}','user')">Replace Screenshots</button></div><div id="dash-shot-${a.id}"></div></div>`}).join(''):'<div class="empty">You have not submitted any apps yet.</div>';
+ $('myApps').innerHTML=rows.length?rows.map(a=>{const st=statusLabel(a.status,a.review_deadline);return `<div class="item"><div class="row between"><b>${escapeHtml(a.name)}</b><span class="status ${st}">${nice(st)}</span></div><div class="small">${escapeHtml(a.category)} · v${escapeHtml(a.version)} · Submitted ${new Date(a.submitted_at).toLocaleString()}</div><div class="deadline">48-hour deadline: ${new Date(a.review_deadline).toLocaleString()}</div>${a.admin_comment?`<p>Admin comment: ${escapeHtml(a.admin_comment)}</p>`:''}${a.rejection_reason?`<p class="error">Reason: ${escapeHtml(a.rejection_reason)}</p>`:''}<div class="actions"><button class="secondary" onclick="openUserOwnedApp('${a.id}')">Open App Page / Manage</button><button class="gold" onclick="toggleDashboardScreenshotManager('${a.id}','user')">Replace Screenshots</button><button class="gold" onclick="toggleDashboardIconManager('${a.id}','user')">Change App Icon</button></div><div id="dash-shot-${a.id}"></div><div id="dash-icon-${a.id}"></div></div>`}).join(''):'<div class="empty">You have not submitted any apps yet.</div>';
 }
 async function loadNotifications(){const {data,error}=await sb.from('email_notifications').select('subject,body,delivery_status,created_at').eq('user_id',currentUser.id).order('created_at',{ascending:false}).limit(30);$('myNotifications').innerHTML=error?`<div class="small">${escapeHtml(error.message)}</div>`:(data?.length?data.map(n=>`<div class="item"><b>${escapeHtml(n.subject)}</b><p>${escapeHtml(n.body)}</p><span class="small">${new Date(n.created_at).toLocaleString()} · ${escapeHtml(n.delivery_status)}</span></div>`).join(''):'<div class="empty">No notifications yet.</div>');}
 let pendingApk=null,pendingApkPath=null,scannedMeta=null;
@@ -726,7 +775,7 @@ window.adminDeleteApp=async function(id){
   msg('App aur uska APK store se delete ho gaya.');await loadAdmin();
  }catch(err){msg('Delete error: '+err.message,true);}
 };
-async function loadAdmin(){if(!currentUser||!isAdmin){view('store');msg('Admin access denied.',true);return;}view('admin');const {data,error}=await sb.from('apps').select('id,user_id,name,developer_name,app_type,category,version,description,package_name,icon_path,apk_size_bytes,status,admin_comment,rejection_reason,submitted_at,review_deadline,apk_path').order('submitted_at',{ascending:false});if(error){$('adminApps').innerHTML=`<div class="notice error">${escapeHtml(error.message)}</div>`;return;}const rows=data||[];$('adminStats').innerHTML=[['All Apps',rows.length],['Pending',rows.filter(x=>x.status==='pending').length],['Approved',rows.filter(x=>x.status==='approved').length],['Overdue',rows.filter(x=>statusLabel(x.status,x.review_deadline)==='overdue').length]].map(([n,v])=>`<div class="stat"><span class="small">${n}</span><b>${v}</b></div>`).join('');$('adminApps').innerHTML=rows.length?rows.map(a=>{const st=statusLabel(a.status,a.review_deadline);return `<div class="item"><div class="row between"><b>${escapeHtml(a.name)}</b><span class="status ${st}">${nice(st)}</span></div><div class="small">${escapeHtml(a.developer_name)} · ${escapeHtml(a.category)} · v${escapeHtml(a.version)} · Owner ${a.user_id}</div><div class="deadline">Submitted ${new Date(a.submitted_at).toLocaleString()} · Deadline ${new Date(a.review_deadline).toLocaleString()}</div><div class="formgrid" style="margin-top:10px"><div><label>Admin comment</label><input id="comment-${a.id}" value="${escapeHtml(a.admin_comment||'')}" placeholder="Request changes / comment"></div><div><label>Reject reason (required for reject)</label><input id="reason-${a.id}" value="${escapeHtml(a.rejection_reason||'')}" placeholder="Reason"></div></div><div class="actions"><button class="secondary" onclick="openAdminAppDetails('${a.id}')">View App Details</button><button class="gold" onclick="toggleDashboardScreenshotManager('${a.id}','admin')">Replace Screenshots</button><button onclick="adminAction('${a.id}','under_review')">Under Review</button><button class="secondary" onclick="adminComment('${a.id}')">Save Comment</button><button class="gold" onclick="adminAction('${a.id}','approved')">Approve</button><button class="danger" onclick="adminAction('${a.id}','rejected')">Reject</button><button class="danger" onclick="adminDeleteApp('${a.id}')">Delete App + APK</button></div><div id="dash-shot-${a.id}"></div></div>`}).join(''):'<div class="empty">No app submissions yet.</div>';await loadAdminUpdates();await loadDeveloperApplications();}
+async function loadAdmin(){if(!currentUser||!isAdmin){view('store');msg('Admin access denied.',true);return;}view('admin');const {data,error}=await sb.from('apps').select('id,user_id,name,developer_name,app_type,category,version,description,package_name,icon_path,apk_size_bytes,status,admin_comment,rejection_reason,submitted_at,review_deadline,apk_path').order('submitted_at',{ascending:false});if(error){$('adminApps').innerHTML=`<div class="notice error">${escapeHtml(error.message)}</div>`;return;}const rows=data||[];$('adminStats').innerHTML=[['All Apps',rows.length],['Pending',rows.filter(x=>x.status==='pending').length],['Approved',rows.filter(x=>x.status==='approved').length],['Overdue',rows.filter(x=>statusLabel(x.status,x.review_deadline)==='overdue').length]].map(([n,v])=>`<div class="stat"><span class="small">${n}</span><b>${v}</b></div>`).join('');$('adminApps').innerHTML=rows.length?rows.map(a=>{const st=statusLabel(a.status,a.review_deadline);return `<div class="item"><div class="row between"><b>${escapeHtml(a.name)}</b><span class="status ${st}">${nice(st)}</span></div><div class="small">${escapeHtml(a.developer_name)} · ${escapeHtml(a.category)} · v${escapeHtml(a.version)} · Owner ${a.user_id}</div><div class="deadline">Submitted ${new Date(a.submitted_at).toLocaleString()} · Deadline ${new Date(a.review_deadline).toLocaleString()}</div><div class="formgrid" style="margin-top:10px"><div><label>Admin comment</label><input id="comment-${a.id}" value="${escapeHtml(a.admin_comment||'')}" placeholder="Request changes / comment"></div><div><label>Reject reason (required for reject)</label><input id="reason-${a.id}" value="${escapeHtml(a.rejection_reason||'')}" placeholder="Reason"></div></div><div class="actions"><button class="secondary" onclick="openAdminAppDetails('${a.id}')">View App Details</button><button class="gold" onclick="toggleDashboardScreenshotManager('${a.id}','admin')">Replace Screenshots</button><button class="gold" onclick="toggleDashboardIconManager('${a.id}','admin')">Change App Icon</button><button onclick="adminAction('${a.id}','under_review')">Under Review</button><button class="secondary" onclick="adminComment('${a.id}')">Save Comment</button><button class="gold" onclick="adminAction('${a.id}','approved')">Approve</button><button class="danger" onclick="adminAction('${a.id}','rejected')">Reject</button><button class="danger" onclick="adminDeleteApp('${a.id}')">Delete App + APK</button></div><div id="dash-shot-${a.id}"></div><div id="dash-icon-${a.id}"></div></div>`}).join(''):'<div class="empty">No app submissions yet.</div>';await loadAdminUpdates();await loadDeveloperApplications();}
 window.adminAction=async(id,status)=>{try{if(!isAdmin)throw new Error('Admin access required.');const patch={status};if(status==='rejected'){patch.rejection_reason=$('reason-'+id).value.trim();if(!patch.rejection_reason)throw new Error('Reject karne ke liye reason likhein.');}const {error}=await sb.from('apps').update(patch).eq('id',id);if(error)throw error;msg('Submission status updated: '+nice(status));await loadAdmin();}catch(e){msg(e.message,true);}};
 window.adminComment=async id=>{try{if(!isAdmin)throw new Error('Admin access required.');const comment=$('comment-'+id).value.trim();if(!comment)throw new Error('Comment likhein.');const {error}=await sb.from('apps').update({status:'comment_required',admin_comment:comment}).eq('id',id);if(error)throw error;msg('Comment saved.');await loadAdmin();}catch(e){msg(e.message,true);}};
 $('moreMenuBtn').onclick=()=>$('moreMenu').classList.toggle('hidden');document.querySelectorAll('[data-more]').forEach(b=>b.onclick=()=>{$('moreMenu').classList.add('hidden');const n=b.dataset.more;if(n==='home'){view('store');loadStore();}else if(n==='all'||n==='apps'||n==='games'){showCategoryDirectory(n);}else if(n==='account'){view('account');}else if(n==='dashboard'){showUserDashboard();}else if(n==='developer'){openDeveloperCenter();}else if(n==='admin'){openAdminWithPin();}});$('categoryBack').onclick=()=>showCategoryDirectory(categoryDirectoryType);$('detailBack').onclick=()=>{if(detailReturnView==='admin')loadAdmin();else if(detailReturnView==='user')showUserDashboard();else{view('store');loadStore();}};
