@@ -24,7 +24,9 @@ data class StoreApp(
     val iconUrl: String?,
     val screenshotUrls: List<String>,
     val apkPath: String,
-    val apkSizeBytes: Long
+    val apkSizeBytes: Long,
+    val status: String = "approved",
+    val adminComment: String? = null
 )
 
 data class AppReview(val id: String, val userName: String, val avatarUrl: String, val rating: Int, val comment: String, val createdAt: String)
@@ -69,9 +71,38 @@ class StoreRepository {
                             iconUrl = iconPath?.let { signedAssetUrl("app-screenshots", it) },
                             screenshotUrls = loadScreenshotUrls(item.optString("id")),
                             apkPath = item.optString("apk_path", ""),
-                            apkSizeBytes = item.optLong("apk_size_bytes", 0L)
+                            apkSizeBytes = item.optLong("apk_size_bytes", 0L),
+                            status = item.optString("status", "approved"),
+                            adminComment = item.optString("admin_comment").takeIf { it.isNotBlank() && it != "null" }
                         )
                     )
+                }
+            }
+        }
+    }
+
+    suspend fun loadMyApps(accessToken: String, userId: String): List<StoreApp> = withContext(Dispatchers.IO) {
+        if (accessToken.isBlank() || userId.isBlank()) return@withContext emptyList()
+        val url = "$BASE_URL/rest/v1/apps?select=id,name,developer_name,app_type,category,version,description,package_name,icon_path,apk_path,apk_size_bytes,status,admin_comment&user_id=eq.${Uri.encode(userId)}&order=created_at.desc"
+        val request = requestBuilder(url).header("Authorization", "Bearer $accessToken").get().build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Your apps load failed (${response.code}): ${response.body?.string().orEmpty()}")
+            val array = JSONArray(response.body?.string().orEmpty())
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.getJSONObject(i)
+                    val iconPath = item.optString("icon_path").takeIf { it.isNotBlank() && it != "null" }
+                    add(StoreApp(
+                        id = item.optString("id"), name = item.optString("name", "Unnamed app"),
+                        developerName = item.optString("developer_name", "Developer"),
+                        appType = item.optString("app_type", "app"), category = item.optString("category", ""),
+                        version = item.optString("version", ""), description = item.optString("description", ""),
+                        packageName = item.optString("package_name", ""),
+                        iconUrl = iconPath?.let { signedAssetUrl("app-screenshots", it) }, screenshotUrls = emptyList(),
+                        apkPath = item.optString("apk_path", ""), apkSizeBytes = item.optLong("apk_size_bytes", 0L),
+                        status = item.optString("status", "pending"),
+                        adminComment = item.optString("admin_comment").takeIf { it.isNotBlank() && it != "null" }
+                    ))
                 }
             }
         }
