@@ -108,6 +108,34 @@ class MainActivity : ComponentActivity() {
             )) {
                 Surface(Modifier.fillMaxSize(), color = DeepBlack) {
                     when {
+                        !account.signedIn -> ProfilePage(
+                            account = account,
+                            onAuthenticate = { email, password, name, signup ->
+                                lifecycleScope.launch {
+                                    try { account = authRepository.authenticate(email, password, name, signup) }
+                                    catch (e: Exception) {
+                                        Toast.makeText(this@MainActivity, e.message ?: "Sign in failed", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            },
+                            onSignOut = { account = authRepository.signOut() },
+                            onAvatar = { uri ->
+                                lifecycleScope.launch {
+                                    try { account = authRepository.updateAvatar(uri) }
+                                    catch (e: Exception) {
+                                        Toast.makeText(this@MainActivity, e.message ?: "Profile photo upload failed", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            },
+                            onUpdateProfile = { name ->
+                                lifecycleScope.launch {
+                                    try { account = authRepository.updateDisplayName(name) }
+                                    catch (e: Exception) {
+                                        Toast.makeText(this@MainActivity, e.message ?: "Profile update failed", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            }
+                        )
                         selectedScreenshotUrl != null -> ScreenshotViewer(
                             imageUrl = selectedScreenshotUrl!!,
                             onClose = { selectedScreenshotUrl = null }
