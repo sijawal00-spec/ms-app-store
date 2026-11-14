@@ -84,6 +84,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var authRepository: AuthRepository
     private var account by mutableStateOf(AccountState())
     private var apps by mutableStateOf<List<StoreApp>>(emptyList())
+    private var myApps by mutableStateOf<List<StoreApp>>(emptyList())
+    private var myAppsLoading by mutableStateOf(false)
+    private var myAppsError by mutableStateOf<String?>(null)
     private var loading by mutableStateOf(true)
     private var error by mutableStateOf<String?>(null)
     private var selectedApp by mutableStateOf<StoreApp?>(null)
@@ -158,7 +161,10 @@ class MainActivity : ComponentActivity() {
                             selectedTab = selectedTab, onTab = {
                                 selectedTab = it
                                 if (it != "Search") { search = ""; selectedCategory = "All" }
-                                if (it == "You") lifecycleScope.launch { try { account = authRepository.refreshProfile() } catch (_: Exception) { } }
+                                if (it == "You") lifecycleScope.launch {
+                                    try { account = authRepository.refreshProfile() } catch (_: Exception) { }
+                                    loadMyApps()
+                                }
                             },
                             selectedCategory = selectedCategory,
                             onCategory = { selectedCategory = it },
@@ -166,6 +172,8 @@ class MainActivity : ComponentActivity() {
                             onSelect = { selectedApp = it },
                             onScreenshot = { selectedScreenshotUrl = it },
                             account = account,
+                            myApps = myApps, myAppsLoading = myAppsLoading, myAppsError = myAppsError,
+                            onRefreshMyApps = { lifecycleScope.launch { loadMyApps() } },
                             onAuthenticate = { email, password, name, signup -> lifecycleScope.launch { try { account = authRepository.authenticate(email, password, name, signup) } catch (e: Exception) { Toast.makeText(this@MainActivity, e.message ?: "Sign in failed", Toast.LENGTH_LONG).show() } } },
                             onSignOut = { account = authRepository.signOut() },
                             onAvatar = { uri -> lifecycleScope.launch { try { account = authRepository.updateAvatar(uri) } catch (e: Exception) { Toast.makeText(this@MainActivity, e.message ?: "Profile photo upload failed", Toast.LENGTH_LONG).show() } } },
@@ -196,6 +204,18 @@ class MainActivity : ComponentActivity() {
             try { apps = repository.loadPublishedApps() }
             catch (e: Exception) { error = e.message ?: "Could not load apps." }
             finally { loading = false }
+        }
+    }
+
+    private fun loadMyApps() {
+        val current = account
+        if (!current.signedIn || current.userId.isBlank()) { myApps = emptyList(); myAppsError = null; return }
+        lifecycleScope.launch {
+            myAppsLoading = true
+            myAppsError = null
+            try { myApps = repository.loadMyApps(current.accessToken, current.userId) }
+            catch (e: Exception) { myAppsError = e.message ?: "Could not load your apps." }
+            finally { myAppsLoading = false }
         }
     }
 
@@ -286,7 +306,9 @@ private fun StoreShell(
     selectedCategory: String, onCategory: (String) -> Unit,
     onRefresh: () -> Unit, onSelect: (StoreApp) -> Unit,
     onScreenshot: (String) -> Unit,
-    account: AccountState, onAuthenticate: (String, String, String, Boolean) -> Unit,
+    account: AccountState, myApps: List<StoreApp> = emptyList(), myAppsLoading: Boolean = false,
+    myAppsError: String? = null, onRefreshMyApps: () -> Unit = {},
+    onAuthenticate: (String, String, String, Boolean) -> Unit,
     onSignOut: () -> Unit, onAvatar: (String) -> Unit, onUpdateProfile: (String) -> Unit,
     onSettings: () -> Unit, onNotifications: () -> Unit, onProfile: () -> Unit
 ) {
@@ -297,7 +319,8 @@ private fun StoreShell(
                 apps, loading, error, search, onSearch, selectedCategory, onCategory,
                 onRefresh, onSelect, onScreenshot
             )
-            "You" -> ProfilePage(account, onAuthenticate, onSignOut, onAvatar, onUpdateProfile)
+            "You" -> ProfilePage(account, onAuthenticate, onSignOut, onAvatar, onUpdateProfile,
+                myApps, myAppsLoading, myAppsError, onRefreshMyApps)
             else -> HomePage(
                 apps, loading, error, selectedTab, onRefresh, onSelect, onScreenshot, account,
                 onSettings, onNotifications, onProfile
@@ -567,7 +590,9 @@ private fun ProfilePage(
     onAuthenticate: (String, String, String, Boolean) -> Unit,
     onSignOut: () -> Unit,
     onAvatar: (String) -> Unit,
-    onUpdateProfile: (String) -> Unit
+    onUpdateProfile: (String) -> Unit,
+    myApps: List<StoreApp> = emptyList(), myAppsLoading: Boolean = false,
+    myAppsError: String? = null, onRefreshMyApps: () -> Unit = {}
 ) {
     var signup by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf(account.email) }
@@ -627,7 +652,7 @@ private fun ProfilePage(
         }
 
         if (account.signedIn) {
-            Column(Modifier.fillMaxWidth().weight(1f).padding(top = 26.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(top = 26.dp, bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 if (account.avatarUri.isNotBlank()) {
                     AsyncImage(model = account.avatarUri, contentDescription = "Profile photo",
                         modifier = Modifier.size(104.dp).clip(CircleShape), contentScale = ContentScale.Crop)
@@ -641,6 +666,40 @@ private fun ProfilePage(
                 Text(account.email, color = Muted, modifier = Modifier.padding(top = 6.dp))
                 Text("Manage your profile using the three-dot menu above.", color = Muted, fontSize = 12.sp,
                     modifier = Modifier.padding(top = 18.dp))
+                Spacer(Modifier.height(28.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("My uploaded apps", color = Gold, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onRefreshMyApps) { Text("Refresh", color = Emerald) }
+                }
+                Text("Apps submitted from your website developer account", color = Muted, fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp))
+                if (myAppsLoading) Box(Modifier.fillMaxWidth().padding(18.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Emerald, modifier = Modifier.size(26.dp))
+                }
+                myAppsError?.let { Text(it, color = Color(0xFFFF8A80), fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) }
+                if (!myAppsLoading && myApps.isEmpty() && myAppsError == null) {
+                    Text("You have not submitted any apps yet.", color = Muted, fontSize = 13.sp,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp))
+                }
+                myApps.forEach { app ->
+                    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(RoundedCornerShape(14.dp)).background(DeepGreen).padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (!app.iconUrl.isNullOrBlank()) AsyncImage(model = app.iconUrl, contentDescription = app.name,
+                                modifier = Modifier.size(52.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
+                            else Box(Modifier.size(52.dp).clip(RoundedCornerShape(12.dp)).background(DeepBlack), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Apps, contentDescription = null, tint = Gold)
+                            }
+                            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                                Text(app.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text("${app.category} · v${app.version}", color = Muted, fontSize = 11.sp)
+                                Text("Status: ${app.status.replace("_", " ").uppercase()}", color = if (app.status == "approved") Emerald else if (app.status == "rejected") Color(0xFFFF8A80) else Gold,
+                                    fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+                            }
+                        }
+                        if (!app.adminComment.isNullOrBlank()) Text("Admin: ${app.adminComment}", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
+                    }
+                }
             }
         } else {
             Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
